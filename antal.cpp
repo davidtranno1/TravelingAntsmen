@@ -11,15 +11,15 @@
 
 #include "CycleTimer.h"
 
-#define MAX_CITIES 30
+#define MAX_CITIES 250
 #define MAX_DIST 100
 #define MAX_TOUR (MAX_CITIES * MAX_DIST)
-#define MAX_ANTS 30
+#define MAX_ANTS MAX_CITIES
 
 using namespace std;
 
-struct cityType{
-  int x,y;
+struct cityType {
+  int x, y;
 };
 
 struct antType{
@@ -37,7 +37,7 @@ struct antType{
 #define QVAL 100
 #define MAX_TOURS 20
 #define MAX_TIME (MAX_TOURS * MAX_CITIES)
-#define INIT_PHER (1.0/MAX_CITIES)
+#define INIT_PHER (1.0 / MAX_CITIES)
 
 // runtime structures and global variables
 
@@ -50,25 +50,22 @@ double phero[MAX_CITIES][MAX_CITIES];
 double best = (double) MAX_TOUR;
 int bestIndex;
 
+// construct TSP graph
+void constructTSP() {
+  // Create cities with random x, y coordinates
+  for (int city = 0; city < MAX_CITIES; city++) {
+    cities[city].x = rand() % MAX_DIST;
+    cities[city].y = rand() % MAX_DIST;
+  }
+}
+
+
 // initializes the entire graph
 void init() {
   int from, to, ant;
 
-  ifstream f1;
-  f1.open("TSP.txt");
-
   // creating cities
   for (from = 0; from < MAX_CITIES; from++) {
-    //randomly place cities
-    /*
-    cities[from].x = rand()%MAX_DIST;
-    cities[from].y = rand()%MAX_DIST;
-    */
-    f1 >> cities[from].x;
-    f1 >> cities[from].y;
-
-    //cout << cities[from].x << " " << cities[from].y << endl;
-    //printf("\n %d %d",cities[from].x, cities[from].y);
     for (to = 0; to < MAX_CITIES; to++) {
       dist[from][to] = 0.0;
       phero[from][to] = INIT_PHER;
@@ -79,8 +76,8 @@ void init() {
   for (from = 0; from < MAX_CITIES; from++) {
     for (to = 0; to < MAX_CITIES; to++) {
       if (to != from && dist[from][to] == 0.0) {
-        int xd = pow( abs(cities[from].x - cities[to].x), 2);
-        int yd = pow( abs(cities[from].y - cities[to].y), 2);
+        int xd = pow(abs(cities[from].x - cities[to].x), 2);
+        int yd = pow(abs(cities[from].y - cities[to].y), 2);
 
         dist[from][to] = sqrt(xd + yd);
         dist[to][from] = dist[from][to];
@@ -130,10 +127,6 @@ void restartAnts() {
       ants[ant].path[i] = -1;
     }
 
-    /*if (to == MAX_CITIES) {
-      to = 0;
-    }*/
-
     ants[ant].curCity = to++;
     ants[ant].pathIndex = 1;
     ants[ant].path[0] = ants[ant].curCity;
@@ -152,33 +145,27 @@ int selectNextCity(int ant) {
   from = ants[ant].curCity;
 
   for (to = 0; to < MAX_CITIES; to++) {
-    if(ants[ant].tabu[to] == 0) {
+    if (ants[ant].tabu[to] == 0) {
       denom += antProduct(from, to);
     }
   }
 
-  //assert(denom != 0.0);
-
-  while (true) {
+  for (to = 0; to < MAX_CITIES; to++) {
     double p;
-    to++;
- 
-    if (to >= MAX_CITIES) {
-      to = 0;
-    }
+
     if (ants[ant].tabu[to] == 0) {
       p = antProduct(from, to) / denom;
 
-      //printf("\n%lf %lf", (double)rand()/RAND_MAX,p);
       double x = ((double)rand() / RAND_MAX);
       if (x < p) {
-        //printf("%lf %lf Yo!",p,x);
-        break;
+        return to;
       }
     }
   }
 
-  return to;
+  // TODO: Not the best solution, but should occur with low probability
+  // If we have yet to pick an edge, select one at random
+  return rand() % MAX_CITIES;
 }
 
 int simulateAnts() {
@@ -228,7 +215,7 @@ void updateTrails()
 
   //Add new pheromone to the trails
   for (ant = 0; ant < MAX_ANTS; ant++) {
-    for (i = 0; i < MAX_CITIES; i++) { 
+    for (i = 0; i < MAX_CITIES; i++) {
       if (i < MAX_CITIES - 1) {
         from = ants[ant].path[i];
         to = ants[ant].path[i+1];
@@ -302,6 +289,8 @@ void cuda_ACO() {
 }
 
 int main() {
+  // Initialize TSP graph
+  constructTSP();
 
   // TODO: move to separate main.cpp file
   double startTime, endTime;
