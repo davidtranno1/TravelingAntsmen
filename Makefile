@@ -1,15 +1,52 @@
-.PHONY: all run clean
+EXECUTABLE := antal
+LOGS	   := logs
 
-default: all
+ARCH=$(shell uname | sed -e 's/-.*//g')
+OBJDIR=objs
+CXX=g++ -m64
+CXXFLAGS=-O3 -Wall -g
 
-all:
-	g++ antal.cpp -o antal
-	g++ antalElitist.cpp -o antalElitist
-	g++ antalRank.cpp -o antalRank
+LIBS       :=
+FRAMEWORKS := 
+
+ifeq ($(ARCH), Darwin)
+# Building on mac
+NVCCFLAGS=-O3 -m64 -arch compute_10
+FRAMEWORKS += OpenGL GLUT
+LDFLAGS=-L/usr/local/cuda/lib/ -lcudart
+else
+# Building on Linux
+NVCCFLAGS=-O3 -m64 -arch compute_20
+LIBS += GL glut cudart
+LDFLAGS=-L/usr/local/cuda/lib64/ -lcudart
+endif
+
+LDLIBS  := $(addprefix -l, $(LIBS))
+LDFRAMEWORKS := $(addprefix -framework , $(FRAMEWORKS))
+
+NVCC=nvcc
+
+OBJS=$(OBJDIR)/antal.o $(OBJDIR)/cudaAnt.o 
+
+.PHONY: dirs clean run
+
+default: $(EXECUTABLE)
+
+dirs:
+		mkdir -p $(OBJDIR)/
+
+clean:
+		rm -rf $(OBJDIR) *~ $(EXECUTABLE) $(LOGS)
+
+$(EXECUTABLE): dirs $(OBJS)
+		$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LDFLAGS) $(LDLIBS) $(LDFRAMEWORKS)
+
+$(OBJDIR)/%.o: %.cpp
+		$(CXX) $< $(CXXFLAGS) -c -o $@
+
+$(OBJDIR)/%.o: %.cu
+		$(NVCC) $< $(NVCCFLAGS) -c -o $@ 
 
 run:
 	#python output.py
 	./antal
-
-clean:
-	rm -rf antal antalElitist antalRank *.txt *.o *.pyc

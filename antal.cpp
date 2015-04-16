@@ -10,6 +10,7 @@
 //#include <highgui.h>
 
 #include "CycleTimer.h"
+#include "parallelAnt.h"
 
 #define MAX_CITIES 250
 #define MAX_DIST 100
@@ -17,6 +18,8 @@
 #define MAX_ANTS MAX_CITIES
 
 using namespace std;
+
+extern void cuda_ACO(void);
 
 struct cityType {
   int x, y;
@@ -281,11 +284,6 @@ void seq_ACO() {
 
   //cout << "\nSACO: Best tour = " << best << endl;
   emitDataFile(bestIndex);
-}
-
-// TODO: run parallel version
-void cuda_ACO() {
-  seq_ACO();
 }
 
 int main() {
