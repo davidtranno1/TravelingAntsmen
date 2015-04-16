@@ -1,4 +1,4 @@
-// Ant algorithms for Traveling salesman Problem
+// Sequential ant algorithm for Traveling Salesman Problem
 
 #include <iostream>
 #include <stdlib.h>
@@ -10,41 +10,11 @@
 //#include <highgui.h>
 
 #include "CycleTimer.h"
-#include "parallelAnt.h"
-
-#define MAX_CITIES 250
-#define MAX_DIST 100
-#define MAX_TOUR (MAX_CITIES * MAX_DIST)
-#define MAX_ANTS MAX_CITIES
-
-using namespace std;
-
-extern void cuda_ACO(void);
-
-struct cityType {
-  int x, y;
-};
-
-struct antType{
-  int curCity, nextCity, pathIndex;
-  int tabu[MAX_CITIES];
-  int path[MAX_CITIES];
-  double tourLength;
-};
-
-//Ant algorithm problem parameters
-
-#define ALPHA 1.0
-#define BETA 5.0 // this parameter raises the weight of distance over pheromone
-#define RHO 0.5 // evaporation rate
-#define QVAL 100
-#define MAX_TOURS 20
-#define MAX_TIME (MAX_TOURS * MAX_CITIES)
-#define INIT_PHER (1.0 / MAX_CITIES)
+#include "ants.h"
 
 // runtime structures and global variables
-
-cityType cities[MAX_CITIES];
+// TODO: store these in a global struct or something?
+cityType *cities;
 antType ants[MAX_ANTS];
 
 double dist[MAX_CITIES][MAX_CITIES];
@@ -52,16 +22,6 @@ double phero[MAX_CITIES][MAX_CITIES];
 
 double best = (double) MAX_TOUR;
 int bestIndex;
-
-// construct TSP graph
-void constructTSP() {
-  // Create cities with random x, y coordinates
-  for (int city = 0; city < MAX_CITIES; city++) {
-    cities[city].x = rand() % MAX_DIST;
-    cities[city].y = rand() % MAX_DIST;
-  }
-}
-
 
 // initializes the entire graph
 void init() {
@@ -89,7 +49,7 @@ void init() {
   }
 
 
-  //initializing the ANTs
+  // initializing the ants
   to = 0;
   for (ant = 0; ant < MAX_ANTS; ant++) {
     if (to == MAX_CITIES) {
@@ -107,7 +67,7 @@ void init() {
     ants[ant].nextCity = -1;
     ants[ant].tourLength = 0;
 
-    //load first city into tabu list
+    // load first city into tabu list
     ants[ant].tabu[ants[ant].curCity] = 1;
   }
 }
@@ -166,7 +126,7 @@ int selectNextCity(int ant) {
     }
   }
 
-  // TODO: Not the best solution, but should occur with low probability
+  // TODO: This might screw up correctness.
   // If we have yet to pick an edge, select one at random
   return rand() % MAX_CITIES;
 }
@@ -241,7 +201,7 @@ void updateTrails()
 
 void emitDataFile(int bestIndex)
 {
-  ofstream f1;
+  std::ofstream f1;
   f1.open("Data.txt");
   antType antBest;
   antBest = ants[bestIndex];
@@ -260,7 +220,8 @@ void emitDataFile(int bestIndex)
 }
 
 
-void seq_ACO() {
+void seq_ACO(cityType *c) {
+  cities = c;
   int curTime = 0;
 
   //cout << "S-ACO:";
@@ -284,32 +245,5 @@ void seq_ACO() {
 
   //cout << "\nSACO: Best tour = " << best << endl;
   emitDataFile(bestIndex);
-}
-
-int main() {
-  // Initialize TSP graph
-  constructTSP();
-
-  // TODO: move to separate main.cpp file
-  double startTime, endTime;
-  cout << "Running sequential ant algorithm..." << endl;
-  startTime = CycleTimer::currentSeconds();
-  seq_ACO();
-  endTime = CycleTimer::currentSeconds();
-  double seqTime = endTime - startTime;
-
-  cout << "Running parallel ant algorithm..." << endl;
-  startTime = CycleTimer::currentSeconds();
-  cuda_ACO();
-  endTime = CycleTimer::currentSeconds();
-  double parTime = endTime - startTime;
-
-  // TODO: check correctness
-  cout << "Correctness passed!" << endl;
-  cout << "Sequential runtime: " << seqTime << " s" << endl;
-  cout << "Parallel runtime: " << parTime << " s" << endl;
-  cout << "Speedup: " << seqTime / parTime << "x" << endl;
-
-  return 0;
 }
 

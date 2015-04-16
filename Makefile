@@ -1,13 +1,12 @@
-EXECUTABLE := antal
-LOGS	   := logs
+EXECUTABLE := main
+LOGS       := logs
+LIBS       :=
+FRAMEWORKS :=
 
 ARCH=$(shell uname | sed -e 's/-.*//g')
 OBJDIR=objs
 CXX=g++ -m64
 CXXFLAGS=-O3 -Wall -g
-
-LIBS       :=
-FRAMEWORKS := 
 
 ifeq ($(ARCH), Darwin)
 # Building on mac
@@ -26,7 +25,7 @@ LDFRAMEWORKS := $(addprefix -framework , $(FRAMEWORKS))
 
 NVCC=nvcc
 
-OBJS=$(OBJDIR)/antal.o $(OBJDIR)/cudaAnt.o 
+OBJS=$(OBJDIR)/main.o $(OBJDIR)/antal.o $(OBJDIR)/cudaAnt.o
 
 .PHONY: dirs clean run
 
@@ -36,7 +35,7 @@ dirs:
 		mkdir -p $(OBJDIR)/
 
 clean:
-		rm -rf $(OBJDIR) *~ $(EXECUTABLE) $(LOGS)
+		rm -rf $(OBJDIR) *~ $(EXECUTABLE) $(LOGS) *.txt
 
 $(EXECUTABLE): dirs $(OBJS)
 		$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LDFLAGS) $(LDLIBS) $(LDFRAMEWORKS)
@@ -49,4 +48,4 @@ $(OBJDIR)/%.o: %.cu
 
 run:
 	#python output.py
-	./antal
+	./main
