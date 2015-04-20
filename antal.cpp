@@ -12,11 +12,19 @@
 #include "CycleTimer.h"
 #include "ants.h"
 
+// stores ant data (visited cities and current path)
+struct antType {
+  int curCity, nextCity, pathIndex;
+  int tabu[MAX_CITIES];
+  int path[MAX_CITIES];
+  double tourLength;
+};
+
 // runtime structures and global variables
 cityType *cities;
 antType ants[MAX_ANTS];
 
-double dist[MAX_CITIES][MAX_CITIES];
+EdgeMatrix *dist;
 double phero[MAX_CITIES][MAX_CITIES];
 
 double best = (double) MAX_TOUR;
@@ -29,24 +37,9 @@ void init() {
   // creating cities
   for (from = 0; from < MAX_CITIES; from++) {
     for (to = 0; to < MAX_CITIES; to++) {
-      dist[from][to] = 0.0;
       phero[from][to] = INIT_PHER;
     }
   }
-
-  // computing distance
-  for (from = 0; from < MAX_CITIES; from++) {
-    for (to = 0; to < MAX_CITIES; to++) {
-      if (to != from && dist[from][to] == 0.0) {
-        int xd = pow(abs(cities[from].x - cities[to].x), 2);
-        int yd = pow(abs(cities[from].y - cities[to].y), 2);
-
-        dist[from][to] = sqrt(xd + yd);
-        dist[to][from] = dist[from][to];
-      }
-    }
-  }
-
 
   // initializing the ants
   to = 0;
@@ -97,7 +90,7 @@ void restartAnts() {
 }
 
 double antProduct(int from, int to) {
-  return (pow(phero[from][to], ALPHA) * pow((1.0 / dist[from][to]), BETA));
+  return (pow(phero[from][to], ALPHA) * pow((1.0 / (*dist)[from][to]), BETA));
 }
 
 int selectNextCity(int ant) {
@@ -142,11 +135,11 @@ int simulateAnts() {
       ants[k].tabu[ants[k].nextCity] = 1;
       ants[k].path[ants[k].pathIndex++] = ants[k].nextCity;
 
-      ants[k].tourLength += dist[ants[k].curCity][ants[k].nextCity];
+      ants[k].tourLength += (*dist)[ants[k].curCity][ants[k].nextCity];
 
       //handle last case->last city to first
       if (ants[k].pathIndex == MAX_CITIES) {
-        ants[k].tourLength += dist[ants[k].path[MAX_CITIES -1]][ants[k].path[0]];
+        ants[k].tourLength += (*dist)[ants[k].path[MAX_CITIES -1]][ants[k].path[0]];
       }
 
       ants[k].curCity = ants[k].nextCity;
@@ -219,8 +212,9 @@ void emitDataFile(int bestIndex)
 }
 
 // TODO: also pass in pointer to array of path
-double seq_ACO(cityType *c) {
+double seq_ACO(cityType *c, EdgeMatrix *d) {
   cities = c;
+  dist = d;
   int curTime = 0;
 
   //cout << "S-ACO:";

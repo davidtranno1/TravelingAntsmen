@@ -18,7 +18,7 @@ __device__ double aantProduct(int from, int to) {
 }
 
 // Randomly select a city based off an array of probabilities (return the index)
-__device__ int selectCity(double *start, double *end) {
+__device__ int selectCity(double *start, int length) {
   return 0;
 }
 
@@ -61,10 +61,7 @@ __global__ void constructAntTour(double *tourResults, int *pathResults) {
       }
 
       //for each thread, look through cities and stochastically select one
-      bestCities[threadIdx.x] =
-         selectCity(&localCityProb[0],
-                    &localCityProb[citiesPerThread]);
-
+      bestCities[threadIdx.x] = selectCity(localCityProb, citiesPerThread);
       cityProb[threadIdx.x] = localCityProb[bestCities[threadIdx.x]];
 
       __syncthreads();
@@ -72,7 +69,7 @@ __global__ void constructAntTour(double *tourResults, int *pathResults) {
       //reduce over cityProb and randomly pick a city based on
       //those probabilities
       if (threadIdx.x == 0) {
-        int next_city = selectCity(&cityProb[0], &cityProb[MAX_THREADS]);
+        int next_city = selectCity(cityProb, MAX_THREADS);
         tour_length += 1; //TODO: find some way to access global graph edge weights
         path[num_visited++] = next_city;
         current_city = next_city;
@@ -92,7 +89,7 @@ __global__ void constructAntTour(double *tourResults, int *pathResults) {
 }
 
 
-double cuda_ACO(cityType *cities) {
+double cuda_ACO(cityType *cities, EdgeMatrix *dist) {
   int best_index = -1;
   double best = (double) MAX_TOUR;
   int* bestPath[MAX_CITIES];

@@ -9,11 +9,19 @@ struct cityType {
   int x, y;
 };
 
-struct antType {
-  int curCity, nextCity, pathIndex;
-  int tabu[MAX_CITIES];
-  int path[MAX_CITIES];
-  double tourLength;
+// allows edge queries as a 2D array
+class EdgeMatrix {
+  double *dist;
+public:
+  EdgeMatrix() {
+    dist = new double[MAX_CITIES * MAX_CITIES];
+  }
+  ~EdgeMatrix() {
+    delete dist;
+  }
+  double* operator[](unsigned int i) {
+    return &dist[MAX_CITIES * i];
+  }
 };
 
 //Ant algorithm problem parameters
