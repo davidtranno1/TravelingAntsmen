@@ -91,9 +91,13 @@ __global__ void constructAntTour(double *tourResults, int *pathResults) {
 
 
 void cuda_ACO(cityType *cities) {
+  int best_index = -1;
   double best = (double) MAX_TOUR;
+  int* bestPath[MAX_CITIES]; 
   dim3 numBlocks(MAX_ANTS);
   dim3 threadsPerBlock(MAX_THREADS);
+  
+  double *copiedTourResults = new double[MAX_ANTS];
   
   double *tourResults;
   int* pathResults;
@@ -103,10 +107,31 @@ void cuda_ACO(cityType *cities) {
   for (int i = 0; i < MAX_TIME; i++) {
     constructAntTour<<<numBlocks, threadsPerBlock>>>(tourResults, pathResults);
     cudaThreadSynchronize();
+    
+    cudaMemcpy(copiedTourResults, tourResults, MAX_ANTS * sizeof(double),
+               cudaMemcpyDeviceToHost);
+    
+    //find the best tour result from all the ants
+    for (int j = 0; j < MAX_ANTS; j++) {
+      if (copiedTourResults[j] < best) {
+        best = copiedTourResults[j];
+        best_index = j;
+      }
+    }
+    
+    //copy the corresponding tour for the best ant
+    if (best_index != -1) {
+      cudaMemcpy(bestPath, 
+                 &pathResults[MAX_CITIES * best_index], 
+                 MAX_CITIES * sizeof(int),
+                 cudaMemcpyDeviceToHost);
+    }
+    
     //TODO: pheromone update
   }
   
   cudaFree(pathResults);
   cudaFree(tourResults);
+  delete copiedTourResults;
   return;
 }
