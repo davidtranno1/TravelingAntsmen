@@ -10,7 +10,7 @@
 
 #include "ants.h"
 
-#define MAX_THREADS 1024
+#define MAX_THREADS 100
 
 __device__ double aantProduct(int from, int to) {
   //return (pow(phero[from][to], ALPHA) * pow((1.0 / dist[from][to]), BETA));
@@ -31,10 +31,11 @@ __global__ void constructAntTour(double *tourResults, int *pathResults) {
     __shared__ int bestCities[MAX_THREADS];
     __shared__ double cityProb[MAX_THREADS];
 
- 
+
     if (threadIdx.x == 0) {
       current_city = 0; //TODO: random make it random random
       num_visited = 0;
+      tour_length = 0.0;
     }
 
     const int citiesPerThread = (MAX_CITIES + MAX_THREADS - 1) / MAX_THREADS;
@@ -50,32 +51,32 @@ __global__ void constructAntTour(double *tourResults, int *pathResults) {
 
     //check if we have finished the tour (can you run into dead ends?)
     while (num_visited != MAX_CITIES) {
-      //pick next city
+      //pick next (unvisited) city
       for (int i = startCityIndex; i < startCityIndex + citiesPerThread; i++) {
         if (tabu[i] != 0) {
-          localCityProb[i] = 0.0;
-          continue;
+          localCityProb[i - startCityIndex] = 0.0;
+        } else {
+          localCityProb[i - startCityIndex] = aantProduct(current_city, i);
         }
-
-        localCityProb[i] = aantProduct(current_city, i);
       }
 
-      bestCities[threadIdx.x] = 
-         selectCity(&localCityProb[startCityIndex], 
-                    &localCityProb[startCityIndex + citiesPerThread]);
+      //for each thread, look through cities and stochastically select one
+      bestCities[threadIdx.x] =
+         selectCity(&localCityProb[0],
+                    &localCityProb[citiesPerThread]);
 
       cityProb[threadIdx.x] = localCityProb[bestCities[threadIdx.x]];
 
       __syncthreads();
 
-      //reduce over cityProb and randomly pick a city based on 
+      //reduce over cityProb and randomly pick a city based on
       //those probabilities
-
-      if(threadIdx.x == 0) {
+      if (threadIdx.x == 0) {
         int next_city = selectCity(&cityProb[0], &cityProb[MAX_THREADS]);
         tour_length += 1; //TODO: find some way to access global graph edge weights
         path[num_visited++] = next_city;
         current_city = next_city;
+        //printf("num visited: %d\n", num_visited);
       }
 
       __syncthreads();
@@ -84,7 +85,7 @@ __global__ void constructAntTour(double *tourResults, int *pathResults) {
     //extract best ant tour length and write the paths out to global memory
     if (threadIdx.x == 0) {
       tourResults[antId] = tour_length;
-      memcpy(pathResults + antId * MAX_CITIES, 
+      memcpy(pathResults + antId * MAX_CITIES,
              path,
              MAX_CITIES * sizeof(int));
     }
@@ -94,7 +95,7 @@ __global__ void constructAntTour(double *tourResults, int *pathResults) {
 double cuda_ACO(cityType *cities) {
   int best_index = -1;
   double best = (double) MAX_TOUR;
-  int* bestPath[MAX_CITIES]; 
+  int* bestPath[MAX_CITIES];
   dim3 numBlocks(MAX_ANTS);
   dim3 threadsPerBlock(MAX_THREADS);
 
@@ -109,12 +110,13 @@ double cuda_ACO(cityType *cities) {
     constructAntTour<<<numBlocks, threadsPerBlock>>>(tourResults, pathResults);
     cudaThreadSynchronize();
 
-    cudaMemcpy(copiedTourResults, tourResults, MAX_ANTS * sizeof(double),
+    cudaMemcpy(copiedTourResults, tourResults, sizeof(double) * MAX_ANTS,
                cudaMemcpyDeviceToHost);
 
     //find the best tour result from all the ants
     for (int j = 0; j < MAX_ANTS; j++) {
       if (copiedTourResults[j] < best) {
+        printf("new best: %f\n", best);
         best = copiedTourResults[j];
         best_index = j;
       }
@@ -122,8 +124,8 @@ double cuda_ACO(cityType *cities) {
 
     //copy the corresponding tour for the best ant
     if (best_index != -1) {
-      cudaMemcpy(bestPath, 
-                 &pathResults[MAX_CITIES * best_index], 
+      cudaMemcpy(bestPath,
+                 &pathResults[MAX_CITIES * best_index],
                  MAX_CITIES * sizeof(int),
                  cudaMemcpyDeviceToHost);
     }
