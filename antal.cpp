@@ -13,7 +13,6 @@
 #include "ants.h"
 
 // runtime structures and global variables
-// TODO: store these in a global struct or something?
 cityType *cities;
 antType ants[MAX_ANTS];
 
@@ -219,8 +218,8 @@ void emitDataFile(int bestIndex)
   f1.close();
 }
 
-
-void seq_ACO(cityType *c) {
+// TODO: also pass in pointer to array of path
+double seq_ACO(cityType *c) {
   cities = c;
   int curTime = 0;
 
@@ -245,5 +244,5 @@ void seq_ACO(cityType *c) {
 
   //cout << "\nSACO: Best tour = " << best << endl;
   emitDataFile(bestIndex);
+  return best;
 }
-

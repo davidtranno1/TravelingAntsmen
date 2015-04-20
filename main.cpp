@@ -9,8 +9,8 @@
 #include "CycleTimer.h"
 #include "ants.h"
 
-extern void cuda_ACO(cityType *cities);
-extern void seq_ACO(cityType *cities);
+extern double cuda_ACO(cityType *cities);
+extern double seq_ACO(cityType *cities);
 
 
 // Construct TSP graph
@@ -31,18 +31,26 @@ int main() {
   double startTime, endTime;
   std::cout << "Running sequential ant algorithm..." << std::endl;
   startTime = CycleTimer::currentSeconds();
-  seq_ACO(cities);
+  double seqTourLength = seq_ACO(cities);
   endTime = CycleTimer::currentSeconds();
   double seqTime = endTime - startTime;
+  std::cout << "Found tour of length " << seqTourLength << std::endl;
 
   std::cout << "Running parallel ant algorithm..." << std::endl;
   startTime = CycleTimer::currentSeconds();
-  cuda_ACO(cities);
+  double parTourLength = cuda_ACO(cities);
   endTime = CycleTimer::currentSeconds();
   double parTime = endTime - startTime;
+  std::cout << "Found tour of length " << parTourLength << std::endl;
 
-  // TODO: check correctness
-  std::cout << "Correctness passed!" << std::endl;
+  // check correctness
+  // TODO: check that tours are actually equal
+  if (seqTourLength == parTourLength) {
+    std::cout << "Correctness passed!" << std::endl;
+  } else {
+    std::cout << "Uh oh! Found two different tours..." << std::endl;
+  }
+  std::cout << std::endl;
   std::cout << "Sequential runtime: " << seqTime << " s" << std::endl;
   std::cout << "Parallel runtime: " << parTime << " s" << std::endl;
   std::cout << "Speedup: " << seqTime / parTime << "x" << std::endl;
