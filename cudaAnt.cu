@@ -38,7 +38,14 @@ __device__ int selectCity(curandState *state, double *randArray, double *start, 
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
   
   for (int i = 0; i < length; i++) {
+    if (start[i] > 0) {
+      //printf("%1.15f\n", start[i]);
+    }
     sum += start[i];
+  }
+  
+  if (sum == 0) {
+    return 0;
   }
   
   make_rand(state, randArray);
@@ -72,7 +79,6 @@ __global__ void constructAntTour(double *edges, double *phero,
     __shared__ int bestCities[MAX_THREADS];
     __shared__ double cityProb[MAX_THREADS];
 
-
     if (threadIdx.x == 0) {
       current_city = 0; //TODO: random make it random random
       num_visited = 0;
@@ -104,23 +110,26 @@ __global__ void constructAntTour(double *edges, double *phero,
           localCityProb[i] = 0.0;
         } else {
           localCityProb[i] = cudaAntProduct(edges, phero, current_city, city);
+          //printf("city prob: %1.15f\n", localCityProb[i]);
         }
       }
 
       //for each thread, look through cities and stochastically select one
-      bestCities[threadIdx.x] = selectCity(state, randArray, localCityProb, citiesPerThread);
-      cityProb[threadIdx.x] = localCityProb[bestCities[threadIdx.x]];
-
+      int localCity = selectCity(state, randArray, localCityProb, citiesPerThread);
+      cityProb[threadIdx.x] = localCityProb[localCity];
+      bestCities[threadIdx.x] = localCity + startCityIndex;
+      //printf("BESTCITIES: %d\n", localCity + startCityIndex);
       __syncthreads();
 
       //reduce over cityProb and randomly pick a city based on
       //those probabilities
       if (threadIdx.x == 0) {
-        int next_city = selectCity(state, randArray, cityProb, MAX_THREADS);
-        tour_length += 1; //TODO: find some way to access global graph edge weights
+        int nextIndex = selectCity(state, randArray, cityProb, MAX_THREADS);
+        //printf("next city index: %d\n", nextIndex);
+        int next_city = bestCities[nextIndex];
+        tour_length += edges[toIndex(current_city, next_city)]; 
         path[num_visited++] = next_city;
         current_city = next_city;
-        //printf("num visited: %d\n", num_visited);
       }
 
       __syncthreads();
@@ -133,6 +142,48 @@ __global__ void constructAntTour(double *edges, double *phero,
     }
 }
 
+__global__ void updateTrails(double *phero, int *paths, double *tourLengths)
+{
+  int antId = blockIdx.x;
+  int from, to;
+  
+  // Pheromone Evaporation
+  if (antId == 0) {
+    for (from = 0; from < MAX_CITIES; from++) {
+      for (to = 0; to < MAX_CITIES; to++) {
+        if (from != to) {
+          phero[toIndex(from, to)] *= 1.0 - RHO;
+
+          if (phero[toIndex(from, to)] < 0.0) {
+            phero[toIndex(from, to)] = INIT_PHER;
+          }
+        }
+      }
+    }
+  }
+  
+  __syncthreads();
+  //Add new pheromone to the trails
+  for (int i = 0; i < MAX_CITIES; i++) {
+    if (i < MAX_CITIES - 1) {
+      from = paths[toIndex(antId, i)];
+      to = paths[toIndex(antId, i+1)];
+    } else {
+      from = paths[toIndex(antId, i)];
+      to = paths[toIndex(antId, 0)];
+    }
+
+    phero[toIndex(from, to)] += (QVAL / tourLengths[antId]);
+    phero[toIndex(to, from)] = phero[toIndex(from, to)];
+  }
+  
+
+  for (from = 0; from < MAX_CITIES; from++) {
+    for (to = 0; to < MAX_CITIES; to++) {
+      phero[toIndex(from, to)] *= RHO;
+    }
+  }
+}
 
 double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   int best_index = -1;
@@ -161,7 +212,7 @@ double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   
   cudaMemcpy(deviceEdges, dist->get_array(), sizeof(double) * MAX_ANTS,
             cudaMemcpyHostToDevice);
-            
+  
   initPhero<<<single, single>>>(phero);
   
   for (int i = 0; i < MAX_TIME; i++) {
@@ -189,7 +240,8 @@ double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
     }
 
     //TODO: pheromone update
-    
+    updateTrails<<<numBlocks, single>>>(phero, pathResults, tourResults); //TODO: change single for optimization
+    cudaThreadSynchronize();
   }
 
   cudaFree(pathResults);
