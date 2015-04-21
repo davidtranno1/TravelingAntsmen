@@ -12,7 +12,7 @@
 
 #define MAX_THREADS 100
 
-__device__ double aantProduct(int from, int to) {
+__device__ double cudaAntProduct(int from, int to) {
   //return (pow(phero[from][to], ALPHA) * pow((1.0 / dist[from][to]), BETA));
   return 0;
 }
@@ -45,18 +45,24 @@ __global__ void constructAntTour(double *tourResults, int *pathResults) {
     double localCityProb[citiesPerThread];
 
     //initiailize tabu list to zero
-    for (int i = startCityIndex; i < startCityIndex + citiesPerThread; i++) {
-      tabu[i] = 0;
+    for (int i = 0; i < citiesPerThread; i++) {
+      int city = i + startCityIndex;
+      if (city >= MAX_CITIES) {
+        break;
+      }
+      tabu[city] = 0;
     }
 
     //check if we have finished the tour (can you run into dead ends?)
     while (num_visited != MAX_CITIES) {
       //pick next (unvisited) city
-      for (int i = startCityIndex; i < startCityIndex + citiesPerThread; i++) {
-        if (tabu[i] != 0) {
-          localCityProb[i - startCityIndex] = 0.0;
+      for (int i = 0; i < citiesPerThread; i++) {
+        int city = i + startCityIndex;
+
+        if (city >= MAX_CITIES || tabu[city] != 0) {
+          localCityProb[i] = 0.0;
         } else {
-          localCityProb[i - startCityIndex] = aantProduct(current_city, i);
+          localCityProb[i] = cudaAntProduct(current_city, city);
         }
       }
 
@@ -82,9 +88,7 @@ __global__ void constructAntTour(double *tourResults, int *pathResults) {
     //extract best ant tour length and write the paths out to global memory
     if (threadIdx.x == 0) {
       tourResults[antId] = tour_length;
-      memcpy(pathResults + antId * MAX_CITIES,
-             path,
-             MAX_CITIES * sizeof(int));
+      memcpy(pathResults + antId * MAX_CITIES, path, MAX_CITIES * sizeof(int));
     }
 }
 
@@ -98,6 +102,7 @@ double cuda_ACO(cityType *cities, EdgeMatrix *dist) {
 
   double *copiedTourResults = new double[MAX_ANTS];
 
+  // malloc device memory
   double *tourResults;
   int* pathResults;
   cudaMalloc((void**)&pathResults, sizeof(int) * MAX_ANTS * MAX_CITIES);
