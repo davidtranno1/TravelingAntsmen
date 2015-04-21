@@ -22,6 +22,10 @@ public:
   double* operator[](unsigned int i) {
     return &dist[MAX_CITIES * i];
   }
+  
+  double *get_array(){
+    return dist;
+  }
 };
 
 //Ant algorithm problem parameters

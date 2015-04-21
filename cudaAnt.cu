@@ -7,14 +7,18 @@
 #include <stdio.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
+#include <math.h>
 
 #include "ants.h"
 
 #define MAX_THREADS 100
 
-__device__ double cudaAntProduct(int from, int to) {
-  //return (pow(phero[from][to], ALPHA) * pow((1.0 / dist[from][to]), BETA));
-  return 0;
+__device__ static inline int toIndex(int i, int j) {
+  return i * MAX_CITIES + j;
+}
+
+__device__ double cudaAntProduct(double *edges, double *phero, int from, int to) {
+  return (pow(phero[toIndex(from, to)], ALPHA) * pow((1.0 / edges[toIndex(from, to)]), BETA));
 }
 
 // Randomly select a city based off an array of probabilities (return the index)
@@ -22,7 +26,14 @@ __device__ int selectCity(double *start, int length) {
   return 0;
 }
 
-__global__ void constructAntTour(double *tourResults, int *pathResults) {
+
+__global__ void initPhero(double *phero) {
+  for(int i = 0; i < MAX_CITIES * MAX_CITIES; i++){
+    phero[i] = INIT_PHER;
+  }
+}
+
+__global__ void constructAntTour(double *edges, double *phero, double *tourResults, int *pathResults) {
     __shared__ int tabu[MAX_CITIES]; //TODO: put in register wtf is that
     __shared__ int current_city;
     __shared__ int path[MAX_CITIES];
@@ -62,7 +73,7 @@ __global__ void constructAntTour(double *tourResults, int *pathResults) {
         if (city >= MAX_CITIES || tabu[city] != 0) {
           localCityProb[i] = 0.0;
         } else {
-          localCityProb[i] = cudaAntProduct(current_city, city);
+          localCityProb[i] = cudaAntProduct(edges, phero, current_city, city);
         }
       }
 
@@ -98,17 +109,28 @@ double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   double best = (double) MAX_TOUR;
   dim3 numBlocks(MAX_ANTS);
   dim3 threadsPerBlock(MAX_THREADS);
-
+  dim3 single(1);
+  
   double *copiedTourResults = new double[MAX_ANTS];
 
   // malloc device memory
   double *tourResults;
   int* pathResults;
+  double *deviceEdges;
+  double *phero;
+  
   cudaMalloc((void**)&pathResults, sizeof(int) * MAX_ANTS * MAX_CITIES);
   cudaMalloc((void**)&tourResults, sizeof(double) * MAX_ANTS);
-
+  cudaMalloc((void**)&deviceEdges, sizeof(double) * MAX_CITIES * MAX_CITIES);
+  cudaMalloc((void**)&phero, sizeof(double) * MAX_CITIES * MAX_CITIES);
+  
+  cudaMemcpy(deviceEdges, dist->get_array(), sizeof(double) * MAX_ANTS,
+            cudaMemcpyHostToDevice);
+            
+  initPhero<<<single, single>>>(phero);
+  
   for (int i = 0; i < MAX_TIME; i++) {
-    constructAntTour<<<numBlocks, threadsPerBlock>>>(tourResults, pathResults);
+    constructAntTour<<<numBlocks, threadsPerBlock>>>(deviceEdges, phero, tourResults, pathResults);
     cudaThreadSynchronize();
 
     cudaMemcpy(copiedTourResults, tourResults, sizeof(double) * MAX_ANTS,
@@ -132,10 +154,12 @@ double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
     }
 
     //TODO: pheromone update
+    
   }
 
   cudaFree(pathResults);
   cudaFree(tourResults);
+  cudaFree(deviceEdges);
   delete copiedTourResults;
   return best;
 }
