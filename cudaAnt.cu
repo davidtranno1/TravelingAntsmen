@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
+#include <curand_kernel.h>
 #include <math.h>
 
 #include "ants.h"
@@ -21,11 +22,38 @@ __device__ double cudaAntProduct(double *edges, double *phero, int from, int to)
   return (pow(phero[toIndex(from, to)], ALPHA) * pow((1.0 / edges[toIndex(from, to)]), BETA));
 }
 
-// Randomly select a city based off an array of probabilities (return the index)
-__device__ int selectCity(double *start, int length) {
-  return 0;
+__global__ void init_rand(curandState *state) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  curand_init(15418, idx, 0, &state[idx]);
 }
 
+__device__ void make_rand(curandState *state, double *randArray) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  randArray[idx] = curand_uniform_double(&state[idx]);
+}
+
+// Randomly select a city based off an array of values (return the index)
+__device__ int selectCity(curandState *state, double *randArray, double *start, int length) {
+  double sum = 0;
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  
+  for (int i = 0; i < length; i++) {
+    sum += start[i];
+  }
+  
+  make_rand(state, randArray);
+  double luckyNumber = (double)randArray[idx] / RAND_MAX;
+  double acc = 0;
+  
+  for (int i = 0; i < length; i++) {
+    acc += start[i]/sum;
+    if (acc >= luckyNumber) {
+      return i;
+    }
+  }
+  
+  return 0;
+}
 
 __global__ void initPhero(double *phero) {
   for(int i = 0; i < MAX_CITIES * MAX_CITIES; i++){
@@ -33,7 +61,9 @@ __global__ void initPhero(double *phero) {
   }
 }
 
-__global__ void constructAntTour(double *edges, double *phero, double *tourResults, int *pathResults) {
+__global__ void constructAntTour(double *edges, double *phero, 
+                                 curandState *state, double *randArray, 
+                                 double *tourResults, int *pathResults) {
     __shared__ int tabu[MAX_CITIES]; //TODO: put in register wtf is that
     __shared__ int current_city;
     __shared__ int path[MAX_CITIES];
@@ -78,7 +108,7 @@ __global__ void constructAntTour(double *edges, double *phero, double *tourResul
       }
 
       //for each thread, look through cities and stochastically select one
-      bestCities[threadIdx.x] = selectCity(localCityProb, citiesPerThread);
+      bestCities[threadIdx.x] = selectCity(state, randArray, localCityProb, citiesPerThread);
       cityProb[threadIdx.x] = localCityProb[bestCities[threadIdx.x]];
 
       __syncthreads();
@@ -86,7 +116,7 @@ __global__ void constructAntTour(double *edges, double *phero, double *tourResul
       //reduce over cityProb and randomly pick a city based on
       //those probabilities
       if (threadIdx.x == 0) {
-        int next_city = selectCity(cityProb, MAX_THREADS);
+        int next_city = selectCity(state, randArray, cityProb, MAX_THREADS);
         tour_length += 1; //TODO: find some way to access global graph edge weights
         path[num_visited++] = next_city;
         current_city = next_city;
@@ -118,11 +148,16 @@ double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   int* pathResults;
   double *deviceEdges;
   double *phero;
+  double *randArray;
+  curandState *randState;
   
   cudaMalloc((void**)&pathResults, sizeof(int) * MAX_ANTS * MAX_CITIES);
   cudaMalloc((void**)&tourResults, sizeof(double) * MAX_ANTS);
   cudaMalloc((void**)&deviceEdges, sizeof(double) * MAX_CITIES * MAX_CITIES);
   cudaMalloc((void**)&phero, sizeof(double) * MAX_CITIES * MAX_CITIES);
+  cudaMalloc(&randState, sizeof(curandState) * MAX_ANTS * MAX_THREADS);
+  cudaMalloc((void**)&randArray, sizeof(double) * MAX_ANTS * MAX_THREADS);
+  init_rand<<<numBlocks, threadsPerBlock>>>(randState);
   
   cudaMemcpy(deviceEdges, dist->get_array(), sizeof(double) * MAX_ANTS,
             cudaMemcpyHostToDevice);
@@ -130,7 +165,7 @@ double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   initPhero<<<single, single>>>(phero);
   
   for (int i = 0; i < MAX_TIME; i++) {
-    constructAntTour<<<numBlocks, threadsPerBlock>>>(deviceEdges, phero, tourResults, pathResults);
+    constructAntTour<<<numBlocks, threadsPerBlock>>>(deviceEdges, phero, randState, randArray, tourResults, pathResults);
     cudaThreadSynchronize();
 
     cudaMemcpy(copiedTourResults, tourResults, sizeof(double) * MAX_ANTS,
@@ -160,6 +195,8 @@ double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   cudaFree(pathResults);
   cudaFree(tourResults);
   cudaFree(deviceEdges);
+  cudaFree(randArray);
+  cudaFree(randState);
   delete copiedTourResults;
   return best;
 }
