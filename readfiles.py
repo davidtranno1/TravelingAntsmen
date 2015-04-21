@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 def cityReadSACO():
 	x,y=loadtxt('city_data.txt', unpack = True)
-	order=loadtxt('Data.txt')
+	order=loadtxt('path_par.txt')
 	print order
 	#print x
 	#print y

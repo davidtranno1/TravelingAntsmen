@@ -93,10 +93,9 @@ __global__ void constructAntTour(double *tourResults, int *pathResults) {
 }
 
 
-double cuda_ACO(cityType *cities, EdgeMatrix *dist) {
+double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   int best_index = -1;
   double best = (double) MAX_TOUR;
-  int* bestPath[MAX_CITIES];
   dim3 numBlocks(MAX_ANTS);
   dim3 threadsPerBlock(MAX_THREADS);
 

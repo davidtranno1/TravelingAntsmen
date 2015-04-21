@@ -3,11 +3,7 @@
 #include <iostream>
 #include <stdlib.h>
 #include <math.h>
-#include <assert.h>
 #include <stdio.h>
-#include <fstream>
-//#include <cv.h>
-//#include <highgui.h>
 
 #include "CycleTimer.h"
 #include "ants.h"
@@ -21,7 +17,6 @@ struct antType {
 };
 
 // runtime structures and global variables
-cityType *cities;
 antType ants[MAX_ANTS];
 
 EdgeMatrix *dist;
@@ -191,29 +186,8 @@ void updateTrails()
   }
 }
 
-void emitDataFile(int bestIndex)
-{
-  std::ofstream f1;
-  f1.open("Data.txt");
-  antType antBest;
-  antBest = ants[bestIndex];
-  //f1<<antBest.curCity<<" "<<antBest.tourLength<<"\n";
-  for (int i = 0; i < MAX_CITIES; i++) {
-    f1 << antBest.path[i] << " ";
-  }
-
-  f1.close();
-
-  f1.open("city_data.txt");
-  for (int i = 0; i < MAX_CITIES; i++) {
-    f1 << cities[i].x << " " << cities[i].y << "\n";
-  }
-  f1.close();
-}
-
 // TODO: also pass in pointer to array of path
-double seq_ACO(cityType *c, EdgeMatrix *d) {
-  cities = c;
+double seq_ACO(EdgeMatrix *d, int *bestPath) {
   dist = d;
   int curTime = 0;
 
@@ -236,7 +210,6 @@ double seq_ACO(cityType *c, EdgeMatrix *d) {
     }
   }
 
-  //cout << "\nSACO: Best tour = " << best << endl;
-  emitDataFile(bestIndex);
+  memcpy(bestPath, ants[bestIndex].path, sizeof(int) * MAX_CITIES);
   return best;
 }

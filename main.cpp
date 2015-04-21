@@ -3,15 +3,16 @@
  *  Run and compare sequential and parallel version of ACO algorithm for TSP
  */
 
-#include <iostream>
 #include <stdio.h>
 #include <math.h>
+#include <iostream>
+#include <fstream>
 
 #include "CycleTimer.h"
 #include "ants.h"
 
-extern double cuda_ACO(cityType *cities, EdgeMatrix *dist);
-extern double seq_ACO(cityType *cities, EdgeMatrix *dist);
+extern double cuda_ACO(EdgeMatrix *dist, int *bestPath);
+extern double seq_ACO(EdgeMatrix *dist, int *bestPath);
 
 
 // Construct TSP graph
@@ -36,33 +37,69 @@ void constructTSP(cityType *cities, EdgeMatrix *dist) {
   }
 }
 
+void savePathDataFile(int *path, char *filename)
+{
+  std::ofstream f1;
+  f1.open(filename);
+  for (int i = 0; i < MAX_CITIES; i++) {
+    f1 << path[i] << " ";
+  }
+  f1 << std::endl;
+  f1.close();
+}
+
+void saveCityDataFile(cityType *cities)
+{
+  std::ofstream f1;
+  f1.open("city_data.txt");
+  for (int i = 0; i < MAX_CITIES; i++) {
+    f1 << cities[i].x << " " << cities[i].y << std::endl;
+  }
+  f1.close();
+}
+
+// Check if two paths match
+bool matchPaths(int *path1, int *path2) {
+  for (int i = 0; i < MAX_CITIES; i++) {
+    if (path1[i] != path2[i])
+      return false;
+  }
+  return true;
+}
+
 
 int main() {
   // Initialize TSP graph
   cityType cities[MAX_CITIES];
   EdgeMatrix *dist = new EdgeMatrix();
+  int seqPath[MAX_CITIES];
+  int parPath[MAX_CITIES];
 
   std::cout << "Constructing graph..." << std::endl;
   constructTSP(cities, dist);
+  saveCityDataFile(cities);
 
+  // Sequential algorithm
   double startTime, endTime;
   std::cout << "Running sequential ant algorithm..." << std::endl;
   startTime = CycleTimer::currentSeconds();
-  double seqTourLength = seq_ACO(cities, dist);
+  double seqTourLength = seq_ACO(dist, seqPath);
   endTime = CycleTimer::currentSeconds();
   double seqTime = endTime - startTime;
   std::cout << "Found tour of length " << seqTourLength << std::endl;
+  savePathDataFile(seqPath, (char *)"path_seq.txt");
 
+  // Parallel algorithm
   std::cout << "Running parallel ant algorithm..." << std::endl;
   startTime = CycleTimer::currentSeconds();
-  double parTourLength = cuda_ACO(cities, dist);
+  double parTourLength = cuda_ACO(dist, parPath);
   endTime = CycleTimer::currentSeconds();
   double parTime = endTime - startTime;
   std::cout << "Found tour of length " << parTourLength << std::endl;
+  savePathDataFile(parPath, (char *)"path_par.txt");
 
-  // check correctness
-  // TODO: check that tours are actually equal
-  if (seqTourLength == parTourLength) {
+  // check correctness and print data
+  if (seqTourLength == parTourLength && matchPaths(seqPath, parPath)) {
     std::cout << "Correctness passed!" << std::endl;
   } else {
     std::cout << "Uh oh! Found two different tours..." << std::endl;
