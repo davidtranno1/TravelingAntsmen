@@ -19,6 +19,12 @@ __device__ static inline int toIndex(int i, int j) {
 }
 
 __device__ double cudaAntProduct(double *edges, double *phero, int from, int to) {
+  double dist = edges[toIndex(from, to)];
+  // TODO: delete this when we're sure it's resolved
+  if (dist == 0.0) {
+    printf("WARNING: traversing 0 weight edge");
+    return dist;
+  }
   return (pow(phero[toIndex(from, to)], ALPHA) * pow((1.0 / edges[toIndex(from, to)]), BETA));
 }
 
@@ -36,29 +42,29 @@ __device__ void make_rand(curandState *state, double *randArray) {
 __device__ int selectCity(curandState *state, double *randArray, double *start, int length) {
   double sum = 0;
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  
+
   for (int i = 0; i < length; i++) {
     if (start[i] > 0) {
       //printf("%1.15f\n", start[i]);
     }
     sum += start[i];
   }
-  
+
   if (sum == 0) {
     return 0;
   }
-  
+
   make_rand(state, randArray);
   double luckyNumber = (double)randArray[idx] / RAND_MAX;
   double acc = 0;
-  
+
   for (int i = 0; i < length; i++) {
     acc += start[i]/sum;
     if (acc >= luckyNumber) {
       return i;
     }
   }
-  
+
   return 0;
 }
 
@@ -68,22 +74,16 @@ __global__ void initPhero(double *phero) {
   }
 }
 
-__global__ void constructAntTour(double *edges, double *phero, 
-                                 curandState *state, double *randArray, 
+__global__ void constructAntTour(double *edges, double *phero,
+                                 curandState *state, double *randArray,
                                  double *tourResults, int *pathResults) {
     __shared__ int tabu[MAX_CITIES]; //TODO: put in register wtf is that
-    __shared__ int current_city;
     __shared__ int path[MAX_CITIES];
+    __shared__ int current_city;
     __shared__ int num_visited;
     __shared__ double tour_length;
     __shared__ int bestCities[MAX_THREADS];
     __shared__ double cityProb[MAX_THREADS];
-
-    if (threadIdx.x == 0) {
-      current_city = 0; //TODO: random make it random random
-      num_visited = 0;
-      tour_length = 0.0;
-    }
 
     const int citiesPerThread = (MAX_CITIES + MAX_THREADS - 1) / MAX_THREADS;
     int startCityIndex = threadIdx.x * citiesPerThread;
@@ -91,14 +91,26 @@ __global__ void constructAntTour(double *edges, double *phero,
 
     double localCityProb[citiesPerThread];
 
+    if (threadIdx.x == 0) {
+      current_city = 0; //TODO: random make it random random
+      num_visited = 1;
+      tour_length = 0.0;
+      tabu[current_city] = 1;
+      path[0] = current_city;
+    }
+
     //initiailize tabu list to zero
     for (int i = 0; i < citiesPerThread; i++) {
       int city = i + startCityIndex;
       if (city >= MAX_CITIES) {
         break;
       }
-      tabu[city] = 0;
+      if (city != current_city) {
+        tabu[city] = 0;
+      }
     }
+
+    __syncthreads();
 
     //check if we have finished the tour (can you run into dead ends?)
     while (num_visited != MAX_CITIES) {
@@ -127,9 +139,10 @@ __global__ void constructAntTour(double *edges, double *phero,
         int nextIndex = selectCity(state, randArray, cityProb, MAX_THREADS);
         //printf("next city index: %d\n", nextIndex);
         int next_city = bestCities[nextIndex];
-        tour_length += edges[toIndex(current_city, next_city)]; 
+        tour_length += edges[toIndex(current_city, next_city)];
         path[num_visited++] = next_city;
         current_city = next_city;
+        tabu[current_city] = 1;
       }
 
       __syncthreads();
@@ -146,7 +159,7 @@ __global__ void updateTrails(double *phero, int *paths, double *tourLengths)
 {
   int antId = blockIdx.x;
   int from, to;
-  
+
   // Pheromone Evaporation
   if (antId == 0) {
     for (from = 0; from < MAX_CITIES; from++) {
@@ -161,8 +174,9 @@ __global__ void updateTrails(double *phero, int *paths, double *tourLengths)
       }
     }
   }
-  
+
   __syncthreads();
+
   //Add new pheromone to the trails
   for (int i = 0; i < MAX_CITIES; i++) {
     if (i < MAX_CITIES - 1) {
@@ -176,7 +190,6 @@ __global__ void updateTrails(double *phero, int *paths, double *tourLengths)
     phero[toIndex(from, to)] += (QVAL / tourLengths[antId]);
     phero[toIndex(to, from)] = phero[toIndex(from, to)];
   }
-  
 
   for (from = 0; from < MAX_CITIES; from++) {
     for (to = 0; to < MAX_CITIES; to++) {

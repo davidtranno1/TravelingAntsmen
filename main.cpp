@@ -31,6 +31,10 @@ void constructTSP(cityType *cities, EdgeMatrix *dist) {
       int xd = pow(abs(cities[from].x - cities[to].x), 2);
       int yd = pow(abs(cities[from].y - cities[to].y), 2);
 
+      // if both cities lie on top of each other, manually set edge weight to 1
+      if (xd == 0 && yd == 0) {
+        xd = 1;
+      }
       (*dist)[from][to] = sqrt(xd + yd);
       (*dist)[to][from] = (*dist)[from][to];
     }
