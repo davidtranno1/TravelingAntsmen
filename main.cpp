@@ -72,9 +72,10 @@ bool matchPaths(int *path1, int *path2) {
 }
 
 // Check if path is a legitimate tour (all unique vertices)
-bool checkTour(int *path) {
+bool checkTourUnique(int *path) {
   bool cities[MAX_CITIES];
   memset(&cities, 0, sizeof(bool) * MAX_CITIES);
+
   for (int i = 0; i < MAX_CITIES; i++) {
     if (cities[path[i]]) {
       return false;
@@ -82,6 +83,22 @@ bool checkTour(int *path) {
     cities[path[i]] = true;
   }
   return true;
+}
+
+// Check if path is a legitimate tour (correct distance)
+// TODO: why is it wrong
+bool checkTourLength(int *path, EdgeMatrix *dist, double length) {
+  double distance = 0.0;
+
+  for (int i = 0; i < MAX_CITIES; i++) {
+    distance += (*dist)[path[i]][path[(i+1) % MAX_CITIES]];
+  }
+  printf("length: %1.5f\n", length);
+  printf("computed dist: %1.5f\n", distance);
+  double diff = distance - length;
+  printf("diff: %1.5f\n", diff);
+
+  return distance == length;
 }
 
 
@@ -104,8 +121,11 @@ int main() {
   endTime = CycleTimer::currentSeconds();
   double seqTime = endTime - startTime;
   std::cout << "Found tour of length " << seqTourLength << std::endl;
-  if (!checkTour(seqPath)) {
+  if (!checkTourUnique(seqPath)) {
     std::cout << "Error: invalid tour (repeated cities!)" << std::endl;
+  }
+  if (!checkTourLength(seqPath, dist, seqTourLength)) {
+    std::cout << "Error: invalid tour (length mismatch!)" << std::endl;
   }
   savePathDataFile(seqPath, (char *)"path_seq.txt");
 
@@ -116,8 +136,11 @@ int main() {
   endTime = CycleTimer::currentSeconds();
   double parTime = endTime - startTime;
   std::cout << "Found tour of length " << parTourLength << std::endl;
-  if (!checkTour(parPath)) {
+  if (!checkTourUnique(parPath)) {
     std::cout << "Error: invalid tour (repeated cities!)" << std::endl;
+  }
+  if (!checkTourLength(parPath, dist, parTourLength)) {
+    std::cout << "Error: invalid tour (length mismatch!)" << std::endl;
   }
   savePathDataFile(parPath, (char *)"path_par.txt");
 

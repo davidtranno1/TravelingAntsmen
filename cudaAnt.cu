@@ -169,6 +169,7 @@ __global__ void constructAntTour(double *edges, double *phero,
 
     //extract best ant tour length and write the paths out to global memory
     if (threadIdx.x == 0) {
+      tour_length += edges[toIndex(current_city, path[0])];
       tourResults[antId] = tour_length;
       memcpy(pathResults + antId * MAX_CITIES, path, MAX_CITIES * sizeof(int));
     }
@@ -247,7 +248,7 @@ double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
 
   initPhero<<<single, single>>>(phero);
 
-  for (int i = 0; i < MAX_TIME; i++) {
+  for (int i = 0; i < MAX_TOURS; i++) {
     constructAntTour<<<numBlocks, threadsPerBlock>>>(deviceEdges, phero, randState, randArray, tourResults, pathResults);
     cudaThreadSynchronize();
 

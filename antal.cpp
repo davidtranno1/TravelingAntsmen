@@ -184,7 +184,6 @@ void updateTrails()
   }
 }
 
-// TODO: also pass in pointer to array of path
 double seq_ACO(EdgeMatrix *d, int *bestPath) {
   dist = d;
   int curTime = 0;
