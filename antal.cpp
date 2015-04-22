@@ -89,33 +89,31 @@ double antProduct(int from, int to) {
 }
 
 int selectNextCity(int ant) {
-  int from, to;
-  double denom = 0.0;
+  int from = ants[ant].curCity;
+  double sum = 0.0;
 
-  from = ants[ant].curCity;
-
-  for (to = 0; to < MAX_CITIES; to++) {
+  for (int to = 0; to < MAX_CITIES; to++) {
     if (ants[ant].tabu[to] == 0) {
-      denom += antProduct(from, to);
+      sum += antProduct(from, to);
     }
   }
 
-  for (to = 0; to < MAX_CITIES; to++) {
-    double p;
+  double acc = 0;
+  double luckyNumber = (double)rand() / RAND_MAX;
 
+  for (int to = 0; to < MAX_CITIES; to++) {
     if (ants[ant].tabu[to] == 0) {
-      p = antProduct(from, to) / denom;
+      acc += antProduct(from, to) / sum;
 
-      double x = ((double)rand() / RAND_MAX);
-      if (x < p) {
+      if (acc >= luckyNumber) {
         return to;
       }
     }
   }
 
-  // TODO: This might screw up correctness.
-  // If we have yet to pick an edge, select one at random
-  return rand() % MAX_CITIES;
+  //should not get here
+  printf("ERROR: failed to select next city\n");
+  return 0;
 }
 
 int simulateAnts() {

@@ -71,6 +71,19 @@ bool matchPaths(int *path1, int *path2) {
   return true;
 }
 
+// Check if path is a legitimate tour (all unique vertices)
+bool checkTour(int *path) {
+  bool cities[MAX_CITIES];
+  memset(&cities, 0, sizeof(bool) * MAX_CITIES);
+  for (int i = 0; i < MAX_CITIES; i++) {
+    if (cities[path[i]]) {
+      return false;
+    }
+    cities[path[i]] = true;
+  }
+  return true;
+}
+
 
 int main() {
   // Initialize TSP graph
@@ -91,6 +104,9 @@ int main() {
   endTime = CycleTimer::currentSeconds();
   double seqTime = endTime - startTime;
   std::cout << "Found tour of length " << seqTourLength << std::endl;
+  if (!checkTour(seqPath)) {
+    std::cout << "Error: invalid tour (repeated cities!)" << std::endl;
+  }
   savePathDataFile(seqPath, (char *)"path_seq.txt");
 
   // Parallel algorithm
@@ -100,6 +116,9 @@ int main() {
   endTime = CycleTimer::currentSeconds();
   double parTime = endTime - startTime;
   std::cout << "Found tour of length " << parTourLength << std::endl;
+  if (!checkTour(parPath)) {
+    std::cout << "Error: invalid tour (repeated cities!)" << std::endl;
+  }
   savePathDataFile(parPath, (char *)"path_par.txt");
 
   // check correctness and print data
