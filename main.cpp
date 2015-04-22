@@ -32,11 +32,12 @@ void constructTSP(cityType *cities, EdgeMatrix *dist) {
       int yd = pow(abs(cities[from].y - cities[to].y), 2);
 
       // if both cities lie on top of each other, manually set edge weight to 1
-      if (xd == 0 && yd == 0) {
-        xd = 1;
+      double edge_dist = sqrt(xd + yd);
+      if (sqrt(xd + yd) == 0) {
+        edge_dist = 1;
       }
-      (*dist)[from][to] = sqrt(xd + yd);
-      (*dist)[to][from] = (*dist)[from][to];
+      (*dist)[from][to] = edge_dist;
+      (*dist)[to][from] = edge_dist;
     }
   }
 }
@@ -95,8 +96,6 @@ bool checkTourLength(int *path, EdgeMatrix *dist, double length) {
   }
   printf("length: %1.5f\n", length);
   printf("computed dist: %1.5f\n", distance);
-  double diff = distance - length;
-  printf("diff: %1.5f\n", diff);
 
   return distance == length;
 }

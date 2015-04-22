@@ -12,7 +12,7 @@
 
 #include "ants.h"
 
-#define MAX_THREADS 100
+#define MAX_THREADS 256
 
 __device__ static inline int toIndex(int i, int j) {
   return i * MAX_CITIES + j;
@@ -21,7 +21,7 @@ __device__ static inline int toIndex(int i, int j) {
 __device__ double cudaAntProduct(double *edges, double *phero, int from, int to) {
   // TODO: delete this when we're sure it's fixed
   if (isinf(pow(1.0 / edges[toIndex(from, to)], BETA))) {
-    printf("OH NO INFINITY\n");
+    printf("OH NO INFINITY: dist = %1.15f\n", edges[toIndex(from, to)]);
   }
   if (pow(phero[toIndex(from, to)], ALPHA) * pow(1.0 / edges[toIndex(from, to)], BETA) == 0) {
     printf("I'M ZERO\n");
@@ -147,11 +147,6 @@ __global__ void constructAntTour(double *edges, double *phero,
       //reduce over cityProb and randomly pick a city based on
       //those probabilities
       if (threadIdx.x == 0) {
-        if (antId == 0) {
-          for (int i = 0; i < MAX_THREADS; i++) {
-            //printf("cityProb[%d]: %1.30f\n", i, cityProb[i]);
-          }
-        }
         int nextIndex = selectCity(state, randArray, cityProb, MAX_THREADS);
         /*if (antId == 0) {
           printf("next city index: %d\n", nextIndex);

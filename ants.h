@@ -1,6 +1,6 @@
 // Traveling Antsmen constants and struct declarations
 
-#define MAX_CITIES 100 // eventually test on 250-800
+#define MAX_CITIES 200 // eventually test on 250-800
 #define MAX_DIST 100
 #define MAX_TOUR (MAX_CITIES * MAX_DIST)
 #define MAX_ANTS MAX_CITIES
