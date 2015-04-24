@@ -23,9 +23,9 @@ __device__ double cudaAntProduct(double *edges, double *phero, int from, int to)
   if (isinf(pow(1.0 / edges[toIndex(from, to)], BETA))) {
     printf("OH NO INFINITY: dist = %1.15f\n", edges[toIndex(from, to)]);
   }
-  if (pow(phero[toIndex(from, to)], ALPHA) * pow(1.0 / edges[toIndex(from, to)], BETA) == 0) {
+  /*if (pow(phero[toIndex(from, to)], ALPHA) * pow(1.0 / edges[toIndex(from, to)], BETA) == 0) {
     printf("I'M ZERO\n");
-  }
+  }*/
 
   return (pow(phero[toIndex(from, to)], ALPHA) * pow(1.0 / edges[toIndex(from, to)], BETA));
 }
@@ -193,6 +193,7 @@ __global__ void updateTrails(double *phero, int *paths, double *tourLengths)
   __syncthreads();
 
   //Add new pheromone to the trails
+  // TODO: need to be atomic
   for (int i = 0; i < MAX_CITIES; i++) {
     if (i < MAX_CITIES - 1) {
       from = paths[toIndex(antId, i)];
@@ -268,7 +269,7 @@ double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
     }
 
     //TODO: pheromone update
-    //updateTrails<<<numBlocks, single>>>(phero, pathResults, tourResults); //TODO: change single for optimization
+    updateTrails<<<numBlocks, single>>>(phero, pathResults, tourResults); //TODO: change single for optimization
     cudaThreadSynchronize();
   }
 

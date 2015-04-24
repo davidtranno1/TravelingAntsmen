@@ -108,6 +108,7 @@ int main() {
   int seqPath[MAX_CITIES];
   int parPath[MAX_CITIES];
 
+  std::cout.precision(6);
   std::cout << "Constructing graph..." << std::endl;
   constructTSP(cities, dist);
   saveCityDataFile(cities);
