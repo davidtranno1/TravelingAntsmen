@@ -170,29 +170,30 @@ __global__ void constructAntTour(double *edges, double *phero,
     }
 }
 
-__global__ void updateTrails(double *phero, int *paths, double *tourLengths)
-{
-  int antId = blockIdx.x;
-  int from, to;
+// Evaporate pheromones along each edge
+__global__ void evaporatePheromones(double *phero) {
+  int cityId = blockDim.x * blockIdx.x + threadIdx.x;
 
-  // Pheromone Evaporation
-  if (antId == 0) {
-    for (from = 0; from < MAX_CITIES; from++) {
-      for (to = 0; to < MAX_CITIES; to++) {
-        if (from != to) {
-          phero[toIndex(from, to)] *= 1.0 - RHO;
+  for (int to = 0; to < MAX_CITIES; to++) {
+    if (cityId == to) {
+      continue;
+    }
 
-          if (phero[toIndex(from, to)] < 0.0) {
-            phero[toIndex(from, to)] = INIT_PHER;
-          }
-        }
-      }
+    int idx = toIndex(cityId, to);
+    phero[idx] *= 1.0 - RHO;
+
+    if (phero[idx] < 0.0) {
+      phero[idx] = INIT_PHER;
     }
   }
+}
 
-  __syncthreads();
+// Add new pheromone to the trails
+__global__ void updateTrails(double *phero, int *paths, double *tourLengths)
+{
+  int antId = threadIdx.x;
+  int from, to;
 
-  //Add new pheromone to the trails
   // TODO: need to be atomic
   for (int i = 0; i < MAX_CITIES; i++) {
     if (i < MAX_CITIES - 1) {
@@ -215,15 +216,18 @@ __global__ void updateTrails(double *phero, int *paths, double *tourLengths)
 }
 
 double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
-  int best_index = -1;
-  double best = (double) MAX_TOUR;
-  dim3 numBlocks(MAX_ANTS);
+  dim3 numAntBlocks(MAX_ANTS);
+  dim3 numCityBlocks((MAX_CITIES + MAX_THREADS - 1) / MAX_THREADS);
   dim3 threadsPerBlock(MAX_THREADS);
   dim3 single(1);
 
+  int best_index = -1;
+  double best = (double) MAX_TOUR;
+
+  // allocate host memory
   double *copiedTourResults = new double[MAX_ANTS];
 
-  // malloc device memory
+  // allocate device memory
   double *tourResults;
   int* pathResults;
   double *deviceEdges;
@@ -237,7 +241,7 @@ double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   cudaMalloc((void**)&phero, sizeof(double) * MAX_CITIES * MAX_CITIES);
   cudaMalloc(&randState, sizeof(curandState) * MAX_ANTS * MAX_THREADS);
   cudaMalloc((void**)&randArray, sizeof(double) * MAX_ANTS * MAX_THREADS);
-  init_rand<<<numBlocks, threadsPerBlock>>>(randState);
+  init_rand<<<numAntBlocks, threadsPerBlock>>>(randState);
 
   cudaMemcpy(deviceEdges, dist->get_array(), sizeof(double) * MAX_CITIES * MAX_CITIES,
              cudaMemcpyHostToDevice);
@@ -245,7 +249,7 @@ double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   initPhero<<<single, single>>>(phero);
 
   for (int i = 0; i < MAX_TOURS; i++) {
-    constructAntTour<<<numBlocks, threadsPerBlock>>>(deviceEdges, phero, randState, randArray, tourResults, pathResults);
+    constructAntTour<<<numAntBlocks, threadsPerBlock>>>(deviceEdges, phero, randState, randArray, tourResults, pathResults);
     cudaThreadSynchronize();
 
     cudaMemcpy(copiedTourResults, tourResults, sizeof(double) * MAX_ANTS,
@@ -268,8 +272,12 @@ double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
                  cudaMemcpyDeviceToHost);
     }
 
+    //evaporate pheromones in parallel
+    evaporatePheromones<<<numCityBlocks, threadsPerBlock>>>(phero);
+    cudaThreadSynchronize();
+
     //TODO: pheromone update
-    updateTrails<<<numBlocks, single>>>(phero, pathResults, tourResults); //TODO: change single for optimization
+    updateTrails<<<numAntBlocks, single>>>(phero, pathResults, tourResults); //TODO: change single for optimization
     cudaThreadSynchronize();
   }
 
