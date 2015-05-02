@@ -64,11 +64,6 @@ void restartAnts() {
   int ant, i, to = 0;
 
   for (ant = 0; ant < MAX_ANTS; ant++) {
-    if (ants[ant].tourLength < best) {
-      best = ants[ant].tourLength;
-      bestIndex = ant;
-    }
-
     ants[ant].nextCity = -1;
     ants[ant].tourLength = 0.0;
 
@@ -187,7 +182,7 @@ void updateTrails()
 double seq_ACO(EdgeMatrix *d, int *bestPath) {
   dist = d;
   int curTime = 0;
-
+  int success = 0;
   //cout << "S-ACO:";
   //cout << "MaxTime=" << MAX_TIME;
 
@@ -196,9 +191,22 @@ double seq_ACO(EdgeMatrix *d, int *bestPath) {
   init();
 
   while (curTime++ < MAX_TIME) {
-    if (simulateAnts() == 0) {
+    bestIndex = -1;
+    success = simulateAnts();
+    if (success == 0) {
+      for (int ant = 0; ant < MAX_ANTS; ant++) {
+        if (ants[ant].tourLength < best) {
+          best = ants[ant].tourLength;
+          bestIndex = ant;
+        }
+      }
+      
+      if (bestIndex != -1) {
+        memcpy(bestPath, ants[bestIndex].path, sizeof(int) * MAX_CITIES);
+      }
+      
       updateTrails();
-
+      
       if (curTime != MAX_TIME) {
         restartAnts();
       }
@@ -206,7 +214,6 @@ double seq_ACO(EdgeMatrix *d, int *bestPath) {
       //cout << "\nTime is " << curTime << "(" << best << ")";
     }
   }
-
-  memcpy(bestPath, ants[bestIndex].path, sizeof(int) * MAX_CITIES);
+  
   return best;
 }

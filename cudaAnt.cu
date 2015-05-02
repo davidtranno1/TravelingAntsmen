@@ -118,7 +118,7 @@ __global__ void constructAntTour(double *edges, double *phero,
 
     __syncthreads();
 
-    //check if we have finished the tour (can you run into dead ends?)
+    //check if we have finished the tour
     while (num_visited != MAX_CITIES) {
       //pick next (unvisited) city
       for (int i = 0; i < citiesPerThread; i++) {
@@ -215,7 +215,7 @@ __global__ void updateTrails(double *phero, int *paths, double *tourLengths)
   }
 }
 
-double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
+double cuda_ACO(EdgeMatrix *dist, int *bestPath) { 
   dim3 numAntBlocks(MAX_ANTS);
   dim3 numCityBlocks((MAX_CITIES + MAX_THREADS - 1) / MAX_THREADS);
   dim3 threadsPerBlock(MAX_THREADS);
@@ -249,6 +249,7 @@ double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   initPhero<<<single, single>>>(phero);
 
   for (int i = 0; i < MAX_TOURS; i++) {
+    best_index = -1;
     constructAntTour<<<numAntBlocks, threadsPerBlock>>>(deviceEdges, phero, randState, randArray, tourResults, pathResults);
     cudaThreadSynchronize();
 
