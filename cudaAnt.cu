@@ -215,7 +215,7 @@ __global__ void updateTrails(double *phero, int *paths, double *tourLengths)
   }
 }
 
-double cuda_ACO(EdgeMatrix *dist, int *bestPath) { 
+double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   dim3 numAntBlocks(MAX_ANTS);
   dim3 numCityBlocks((MAX_CITIES + MAX_THREADS - 1) / MAX_THREADS);
   dim3 threadsPerBlock(MAX_THREADS);
