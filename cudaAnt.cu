@@ -10,6 +10,8 @@
 #include <curand_kernel.h>
 #include <math.h>
 
+#include <math_functions.h>
+
 #include "ants.h"
 
 #define MAX_THREADS 256
@@ -32,7 +34,7 @@ __device__ double cudaAntProduct(double *edges, double *phero, int from, int to)
 
 __global__ void init_rand(curandState *state) {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  curand_init(15418, idx, 0, &state[idx]);
+  curand_init(1230, idx, 0, &state[idx]);
 }
 
 __device__ void make_rand(curandState *state, double *randArray) {
@@ -71,6 +73,22 @@ __device__ int selectCity(curandState *state, double *randArray, double *start, 
   }
 
   return 0;
+}
+
+__device__ int calculateFrom(int i){
+  //find least triangle number less than i
+  int row = (-1 + (sqrt((float)(1 + 8 * i)))) / 2;
+  int tnum = (row * (row + 1)) / 2;
+  int remain = i - tnum;
+  return remain;
+}
+
+__device__ int calculateTo(int i){
+  //find least triangle number less than i
+  int row = (-1 + (sqrt((float)(1 + 8 * i)))) / 2;
+  int tnum = (row * (row + 1)) / 2;
+  int remain = i - tnum;
+  return MAX_CITIES - (row - remain) - 1;
 }
 
 __global__ void initPhero(double *phero) {
@@ -188,14 +206,68 @@ __global__ void evaporatePheromones(double *phero) {
   }
 }
 
+
 // Add new pheromone to the trails
 __global__ void updateTrails(double *phero, int *paths, double *tourLengths)
 {
-  int antId = threadIdx.x;
+  //int antId = threadIdx.x;
   int from, to;
-
+ 
+  __shared__ int numPhero;
+  __shared__ int blockStartPhero;
+  
+  if (threadIdx.x == 0) {
+    numPhero = (((MAX_CITIES * MAX_CITIES) / 2) + (MAX_THREADS * MAX_ANTS - 1))
+               / (MAX_THREADS * MAX_ANTS);
+    blockStartPhero = numPhero * MAX_THREADS * blockIdx.x;
+  }
+  
+  __syncthreads();
+  
+  int cur_phero;
   // TODO: need to be atomic
-  for (int i = 0; i < MAX_CITIES; i++) {
+  for (int i = 0; i < MAX_ANTS; i++) {
+    for (int j = 0; j < numPhero; j++) {
+      cur_phero = blockStartPhero + j + numPhero * threadIdx.x;
+      
+      if (cur_phero >= (MAX_CITIES * MAX_CITIES) / 2) {
+        break;
+      }
+      
+      from = calculateFrom(cur_phero); //triangle number thing
+      to = calculateTo(cur_phero);
+      bool touched = false;
+      int checkTo;
+      int checkFrom;
+      for (int k = 0; k < MAX_CITIES; k++) {
+        checkFrom = paths[toIndex(i, k)];
+        if (k < MAX_CITIES - 1) {
+          checkTo = paths[toIndex(i, k + 1)];
+        } else {
+          checkTo = paths[toIndex(i, 0)];
+        }
+        
+        //printf("NEW VALUE: to: %d, from: %d", to, from);
+        if ((checkFrom == from && checkTo == to) ||
+            (checkFrom == to && checkTo == from)) 
+        {
+          touched = true;
+          break;      
+        }
+      }
+      
+      if (touched) {
+        phero[toIndex(from, to)] += (QVAL / tourLengths[i]);
+        phero[toIndex(from, to)] *= RHO;
+        phero[toIndex(to, from)] = phero[toIndex(from, to)];
+        /*if (i == 0) {
+          printf("NEW VALUE: to: %d, from: %d, value: %f\n", to, from, phero[toIndex(to, from)]);
+        }*/
+      }
+    }
+  }
+  
+  /*for (int i = 0; i < MAX_CITIES; i++) {
     if (i < MAX_CITIES - 1) {
       from = paths[toIndex(antId, i)];
       to = paths[toIndex(antId, i+1)];
@@ -212,7 +284,7 @@ __global__ void updateTrails(double *phero, int *paths, double *tourLengths)
     for (to = 0; to < MAX_CITIES; to++) {
       phero[toIndex(from, to)] *= RHO;
     }
-  }
+  }*/
 }
 
 double cuda_ACO(EdgeMatrix *dist, int *bestPath) { 
@@ -278,7 +350,7 @@ double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
     cudaThreadSynchronize();
 
     //TODO: pheromone update
-    updateTrails<<<numAntBlocks, single>>>(phero, pathResults, tourResults); //TODO: change single for optimization
+    updateTrails<<<numAntBlocks, threadsPerBlock>>>(phero, pathResults, tourResults); 
     cudaThreadSynchronize();
   }
 
