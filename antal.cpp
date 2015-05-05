@@ -201,13 +201,13 @@ double seq_ACO(EdgeMatrix *d, int *bestPath) {
           bestIndex = ant;
         }
       }
-      
+
       if (bestIndex != -1) {
         memcpy(bestPath, ants[bestIndex].path, sizeof(int) * MAX_CITIES);
       }
-      
+
       updateTrails();
-      
+
       if (curTime != MAX_TIME) {
         restartAnts();
       }
@@ -215,6 +215,6 @@ double seq_ACO(EdgeMatrix *d, int *bestPath) {
       //cout << "\nTime is " << curTime << "(" << best << ")";
     }
   }
-  
+
   return best;
 }

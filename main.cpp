@@ -87,15 +87,12 @@ bool checkTourUnique(int *path) {
 }
 
 // Check if path is a legitimate tour (correct distance)
-// TODO: why is it wrong
 bool checkTourLength(int *path, EdgeMatrix *dist, double length) {
   double distance = 0.0;
 
   for (int i = 0; i < MAX_CITIES; i++) {
     distance += (*dist)[path[i]][path[(i+1) % MAX_CITIES]];
   }
-  printf("length: %1.5f\n", length);
-  printf("computed dist: %1.5f\n", distance);
 
   return distance == length;
 }
