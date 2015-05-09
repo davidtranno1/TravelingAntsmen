@@ -12,6 +12,7 @@
 
 #include <math_functions.h>
 
+#include "cycleTimer.h"
 #include "ants.h"
 
 #define MAX_THREADS 256
@@ -97,11 +98,15 @@ __global__ void initPhero(double *phero) {
   }
 }
 
+__global__ void copyBestPath(int i, int *bestPathResult, int *pathResults) {
+  memcpy(bestPathResult, pathResults + i * MAX_CITIES, MAX_CITIES * sizeof(int));                                  
+}
+                                 
 __global__ void constructAntTour(double *edges, double *phero,
                                  curandState *state, double *randArray,
                                  double *tourResults, int *pathResults) {
     __shared__ int tabu[MAX_CITIES]; //TODO: put in register wtf is that
-    __shared__ int path[MAX_CITIES];
+    //__shared__ int path[MAX_CITIES];
     __shared__ int current_city;
     __shared__ int num_visited;
     __shared__ double tour_length;
@@ -115,11 +120,12 @@ __global__ void constructAntTour(double *edges, double *phero,
     double localCityProb[citiesPerThread];
 
     if (threadIdx.x == 0) {
-      current_city = 0; //TODO: random make it random random
+      make_rand(state, randArray); 
+      current_city = randArray[antId * blockDim.x + threadIdx.x] * MAX_CITIES;
       num_visited = 1;
       tour_length = 0.0;
       tabu[current_city] = 1;
-      path[0] = current_city;
+      pathResults[antId * MAX_CITIES] = current_city;
     }
     __syncthreads();
 
@@ -172,19 +178,21 @@ __global__ void constructAntTour(double *edges, double *phero,
         }*/
         int next_city = bestCities[nextIndex];
         tour_length += edges[toIndex(current_city, next_city)];
-        path[num_visited++] = next_city;
+        pathResults[antId * MAX_CITIES + num_visited] = next_city;
+        num_visited++;
+        //path[num_visited++] = next_city;
         current_city = next_city;
         tabu[current_city] = 1;
       }
 
-      __syncthreads();
+      __syncthreads(); //TODO: move this syncthreads?
     }
 
     //extract best ant tour length and write the paths out to global memory
     if (threadIdx.x == 0) {
-      tour_length += edges[toIndex(current_city, path[0])];
+      tour_length += edges[toIndex(current_city, pathResults[antId * MAX_CITIES])];
       tourResults[antId] = tour_length;
-      memcpy(pathResults + antId * MAX_CITIES, path, MAX_CITIES * sizeof(int));
+      //memcpy(pathResults + antId * MAX_CITIES, path, MAX_CITIES * sizeof(int));
     }
 }
 
@@ -301,7 +309,8 @@ double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
 
   // allocate device memory
   double *tourResults;
-  int* pathResults;
+  int *pathResults;
+  int *bestPathResult;
   double *deviceEdges;
   double *phero;
   double *randArray;
@@ -313,6 +322,7 @@ double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   cudaMalloc((void**)&phero, sizeof(double) * MAX_CITIES * MAX_CITIES);
   cudaMalloc(&randState, sizeof(curandState) * MAX_ANTS * MAX_THREADS);
   cudaMalloc((void**)&randArray, sizeof(double) * MAX_ANTS * MAX_THREADS);
+  cudaMalloc((void**)&bestPathResult, sizeof(int) * MAX_CITIES);
   init_rand<<<numAntBlocks, threadsPerBlock>>>(randState);
 
   cudaMemcpy(deviceEdges, dist->get_array(), sizeof(double) * MAX_CITIES * MAX_CITIES,
@@ -320,11 +330,20 @@ double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
 
   initPhero<<<single, single>>>(phero);
 
+  double pathTime = 0;
+  double pheroTime = 0;
+  double sBegin;
+  double sEnd;
   for (int i = 0; i < MAX_TOURS; i++) {
     best_index = -1;
+    
+    sBegin = CycleTimer::currentSeconds();
     constructAntTour<<<numAntBlocks, threadsPerBlock>>>(deviceEdges, phero, randState, randArray, tourResults, pathResults);
     cudaThreadSynchronize();
-
+    sEnd = CycleTimer::currentSeconds();
+    
+    pathTime += (sEnd - sBegin);
+    
     cudaMemcpy(copiedTourResults, tourResults, sizeof(double) * MAX_ANTS,
                cudaMemcpyDeviceToHost);
 
@@ -339,21 +358,29 @@ double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
 
     //copy the corresponding tour for the best ant
     if (best_index != -1) {
-      cudaMemcpy(bestPath,
-                 &pathResults[MAX_CITIES * best_index],
-                 MAX_CITIES * sizeof(int),
-                 cudaMemcpyDeviceToHost);
+      copyBestPath<<<single, single>>> (best_index, bestPathResult, pathResults);
     }
 
     //evaporate pheromones in parallel
+    sBegin = CycleTimer::currentSeconds();
     evaporatePheromones<<<numCityBlocks, threadsPerBlock>>>(phero);
     cudaThreadSynchronize();
 
     //TODO: pheromone update
     updateTrails<<<numAntBlocks, threadsPerBlock>>>(phero, pathResults, tourResults); 
     cudaThreadSynchronize();
+    sEnd = CycleTimer::currentSeconds();
+    pheroTime += (sEnd - sBegin);
   }
+  
+  printf("PATHTIME: %f, PHEROTIME: %f\n", pathTime, pheroTime);
 
+  cudaMemcpy(bestPath,
+             bestPathResult,
+             MAX_CITIES * sizeof(int),
+             cudaMemcpyDeviceToHost);
+  
+  cudaFree(bestPathResult);
   cudaFree(pathResults);
   cudaFree(tourResults);
   cudaFree(deviceEdges);

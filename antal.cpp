@@ -197,7 +197,7 @@ double seq_ACO(EdgeMatrix *d, int *bestPath) {
       for (int ant = 0; ant < MAX_ANTS; ant++) {
         if (ants[ant].tourLength < best) {
           best = ants[ant].tourLength;
-          //printf("new best: %f\n", best);
+          printf("new best: %f\n", best);
           bestIndex = ant;
         }
       }
