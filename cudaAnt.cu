@@ -85,6 +85,7 @@ __device__ int selectCity(curandState *state, float *randArray, float *start, in
   return lastBestIndex;
 }
 
+// TODO: get rid of triangular number code
 __device__ int calculateFrom(int i){
   //find least triangle number less than i
   int row = (-1 + (sqrt((float)(1 + 8 * i)))) / 2;
@@ -102,7 +103,7 @@ __device__ int calculateTo(int i){
 }
 
 __global__ void initPhero(float *phero) {
-  int idx = blockIdx.x * MAX_THREADS + threadIdx.x;
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx < MAX_CITIES * MAX_CITIES / 2) {
     phero[idx] = INIT_PHER;
     phero[MAX_CITIES * MAX_CITIES - idx] = INIT_PHER;
@@ -131,7 +132,9 @@ __global__ void constructAntTour(float *edges, float *phero,
     int antId = blockIdx.x;
     float tour_length;
 
-    if (startCityIndex >= MAX_THREADS) {
+    if (startCityIndex >= MAX_CITIES) {
+      //printf("i'm over. startCityIndex: %d, MAX_CITIES: %d\n", startCityIndex, MAX_CITIES);
+      cityProb[threadIdx.x] = 0;
       return;
     }
 
@@ -170,10 +173,10 @@ __global__ void constructAntTour(float *edges, float *phero,
         tile = citiesPerThread;
       }
 
-      if (startCityIndex < MAX_CITIES) {
+      //if (startCityIndex < MAX_CITIES) {
         memcpy(&localEdges[startCityIndex], &edges[current_city * MAX_CITIES + startCityIndex], tile * sizeof(float));
         memcpy(&localPhero[startCityIndex], &phero[current_city * MAX_CITIES + startCityIndex], tile * sizeof(float));
-      }
+      //}
       /*for (int i = 0; i < citiesPerThread; i++) {
         int city = i + startCityIndex;
 
@@ -222,9 +225,12 @@ __global__ void constructAntTour(float *edges, float *phero,
         float best_distance = MAX_DIST * 2;
         int next_city = -1;
         for (int i = 0; i < MAX_THREADS && i < MAX_CITIES; i++) {
+          if (cityProb[i] == 0) {
+            continue;
+          }
           //printf("best city[%d]: %d\n", i, bestCities[i]);
           float distance = localEdges[bestCities[i]];
-          if (cityProb[i] > 0 && distance < best_distance) {
+          if (distance < best_distance) {
             best_distance = distance;
             next_city = bestCities[i];
           }
@@ -232,12 +238,6 @@ __global__ void constructAntTour(float *edges, float *phero,
         /*if (next_city == -1) {
           printf("OH NO\n");
         }*/
-        //int nextIndex = selectCity(state, randArray, cityProb, MAX_THREADS);
-        /*if (antId == 0) {
-          printf("next city index: %d\n", nextIndex);
-          printf("next city prob: %1.15f\n", cityProb[nextIndex]);
-        }*/
-        //int next_city = bestCities[nextIndex];
         tour_length += localEdges[next_city];
         pathResults[antId * MAX_CITIES + num_visited] = next_city;
         num_visited++;
@@ -286,7 +286,7 @@ __global__ void updateTrails(float *phero, int *paths, float *tourLengths)
   if (threadIdx.x == 0) {
     numPhero = (((MAX_CITIES * MAX_CITIES) / 2) + (MAX_THREADS * MAX_ANTS - 1))
                / (MAX_THREADS * MAX_ANTS);
-    blockStartPhero = numPhero * MAX_THREADS * blockIdx.x;
+    blockStartPhero = numPhero * blockDim.x * blockIdx.x;
   }
 
   __syncthreads();
@@ -302,6 +302,10 @@ __global__ void updateTrails(float *phero, int *paths, float *tourLengths)
 
       from = calculateFrom(cur_phero); //triangle number thing
       to = calculateTo(cur_phero);
+      if (from == to) {
+        continue;
+      }
+
       bool touched = false;
       int checkTo;
       int checkFrom;
