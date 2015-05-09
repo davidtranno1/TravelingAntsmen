@@ -124,7 +124,7 @@ int main() {
   savePathDataFile(seqPath, (char *)"path_seq.txt");
 
   // Parallel algorithm
-  std::cout << "Running parallel ant algorithm..." << std::endl;
+  /*std::cout << "Running parallel ant algorithm..." << std::endl;
   startTime = CycleTimer::currentSeconds();
   float parTourLength = cuda_ACO(dist, parPath);
   endTime = CycleTimer::currentSeconds();
@@ -144,11 +144,11 @@ int main() {
   } else {
     std::cout << "Uh oh! Found two different tours..." << std::endl;
   }
-
+  */
   std::cout << std::endl;
   std::cout << "Sequential runtime: " << seqTime << " s" << std::endl;
-  std::cout << "Parallel runtime: " << parTime << " s" << std::endl;
-  std::cout << "Speedup: " << seqTime / parTime << "x" << std::endl;
+  //std::cout << "Parallel runtime: " << parTime << " s" << std::endl;
+  //std::cout << "Speedup: " << seqTime / parTime << "x" << std::endl;
 
   delete dist;
   return 0;
