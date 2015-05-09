@@ -93,22 +93,33 @@ int selectNextCity(int ant) {
     }
   }
 
+  if (sum == 0) {
+    printf("warning: zero sum in selectNextCity\n");
+    return 0;
+  }
+
+  int lastBestIndex = 0;
   float acc = 0;
   float luckyNumber = (float)rand() / RAND_MAX;
 
   for (int to = 0; to < MAX_CITIES; to++) {
     if (ants[ant].tabu[to] == 0) {
-      acc += antProduct(from, to) / sum;
+      float product = antProduct(from, to) / sum;
+      if (product > 0) {
+        acc += product;
+        lastBestIndex = to;
 
-      if (acc >= luckyNumber) {
-        return to;
+        if (acc >= luckyNumber) {
+          return to;
+        }
       }
     }
   }
 
-  //should not get here
-  printf("ERROR: failed to select next city\n");
-  return 0;
+  //if we get here (floating point errors), return last best city
+  printf("warning: acc did not reach luckyNumber in selectNextCity\n");
+  printf("acc: %1.15f, luckyNumber: %1.15f\n", acc, luckyNumber);
+  return lastBestIndex;
 }
 
 int simulateAnts() {

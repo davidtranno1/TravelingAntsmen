@@ -67,17 +67,26 @@ __device__ int selectCity(curandState *state, float *randArray, float *start, in
   float luckyNumber = (float)randArray[idx];
   float acc = 0;
 
+  int lastBestIndex = 0;
   for (int i = 0; i < length; i++) {
-    acc += start[i] / sum;
-    if (acc >= luckyNumber) {
-      /*if (idx == 0) {
-        printf("SUM: %1.15f, ACC: %1.15f, LUCKYNUM: %1.15f, i: %d, length: %d\n", sum, acc, luckyNumber, i, length);
-      }*/
-      return i;
+    float value = start[i] / sum;
+    if (value > 0) {
+      acc += value;
+      lastBestIndex = i;
+
+      if (acc >= luckyNumber) {
+        /*if (idx == 0) {
+          printf("SUM: %1.15f, ACC: %1.15f, LUCKYNUM: %1.15f, i: %d, length: %d\n", sum, acc, luckyNumber, i, length);
+        }*/
+        return i;
+      }
+
     }
   }
 
-  return 0;
+  printf("warning: acc did not reach luckyNumber in selectNextCity\n");
+  printf("acc: %1.15f, luckyNumber: %1.15f\n", acc, luckyNumber);
+  return lastBestIndex;
 }
 
 __device__ int calculateFrom(int i){
