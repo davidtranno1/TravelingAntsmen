@@ -27,9 +27,9 @@ NVCC=nvcc
 
 OBJS=$(OBJDIR)/main.o $(OBJDIR)/antal.o $(OBJDIR)/cudaAnt.o
 
-.PHONY: dirs clean run
+.PHONY: dirs clean run par
 
-default: $(EXECUTABLE) run
+default: $(EXECUTABLE) par
 
 dirs:
 		mkdir -p $(OBJDIR)/
@@ -44,8 +44,10 @@ $(OBJDIR)/%.o: %.cpp
 		$(CXX) $< $(CXXFLAGS) -c -o $@
 
 $(OBJDIR)/%.o: %.cu
-		$(NVCC) $< $(NVCCFLAGS) -c -o $@ 
+		$(NVCC) $< $(NVCCFLAGS) -c -o $@
 
 run:
-	#python output.py
 	./main
+
+par:
+	./main -p

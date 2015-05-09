@@ -7,6 +7,7 @@
 #include <math.h>
 #include <iostream>
 #include <fstream>
+#include <unistd.h>
 
 #include "CycleTimer.h"
 #include "ants.h"
@@ -98,7 +99,21 @@ bool checkTourLength(int *path, EdgeMatrix *dist, float length) {
 }
 
 
-int main() {
+int main(int argc, char *argv[]) {
+  int opt;
+  bool par_only = false;
+  while ((opt = getopt(argc, argv, "p")) != -1) {
+    switch (opt) {
+      case 'p':
+        par_only = true;
+        break;
+      default:
+        fprintf(stderr, "Usage: %s [-p]\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+  }
+
+
   // Initialize TSP graph
   cityType cities[MAX_CITIES];
   EdgeMatrix *dist = new EdgeMatrix();
@@ -112,20 +127,22 @@ int main() {
 
   // Sequential algorithm
   float startTime, endTime;
-  /*std::cout << "Running sequential ant algorithm..." << std::endl;
-  startTime = CycleTimer::currentSeconds();
-  float seqTourLength = seq_ACO(dist, seqPath);
-  endTime = CycleTimer::currentSeconds();
-  float seqTime = endTime - startTime;
-  std::cout << "Found tour of length " << seqTourLength << std::endl;
-  if (!checkTourUnique(seqPath)) {
-    std::cout << "Error: invalid tour (repeated cities!)" << std::endl;
+  float seqTourLength, seqTime;
+  if (!par_only) {
+    std::cout << "Running sequential ant algorithm..." << std::endl;
+    startTime = CycleTimer::currentSeconds();
+    seqTourLength = seq_ACO(dist, seqPath);
+    endTime = CycleTimer::currentSeconds();
+    seqTime = endTime - startTime;
+    std::cout << "Found tour of length " << seqTourLength << std::endl;
+    if (!checkTourUnique(seqPath)) {
+      std::cout << "Error: invalid tour (repeated cities!)" << std::endl;
+    }
+    if (!checkTourLength(seqPath, dist, seqTourLength)) {
+      std::cout << "Error: invalid tour (length mismatch!)" << std::endl;
+    }
+    savePathDataFile(seqPath, (char *)"path_seq.txt");
   }
-  if (!checkTourLength(seqPath, dist, seqTourLength)) {
-    std::cout << "Error: invalid tour (length mismatch!)" << std::endl;
-  }
-  savePathDataFile(seqPath, (char *)"path_seq.txt");
-  */
 
   // Parallel algorithm
   std::cout << "Running parallel ant algorithm..." << std::endl;
@@ -143,15 +160,21 @@ int main() {
   savePathDataFile(parPath, (char *)"path_par.txt");
 
   // check correctness and print data
-  /*if (seqTourLength == parTourLength && matchPaths(seqPath, parPath)) {
-    std::cout << "Correctness passed!" << std::endl;
-  } else {
-    std::cout << "Uh oh! Found two different tours..." << std::endl;
-  }*/
+  if (!par_only) {
+    if (seqTourLength == parTourLength && matchPaths(seqPath, parPath)) {
+      std::cout << "Correctness passed!" << std::endl;
+    } else {
+      std::cout << "Uh oh! Found two different tours..." << std::endl;
+    }
+  }
   std::cout << std::endl;
-  //std::cout << "Sequential runtime: " << seqTime << " s" << std::endl;
-  std::cout << "Parallel runtime: " << parTime << " s" << std::endl;
-  //std::cout << "Speedup: " << seqTime / parTime << "x" << std::endl;
+  if (!par_only) {
+    std::cout << "Sequential runtime: " << seqTime << " s" << std::endl;
+    std::cout << "Parallel runtime: " << parTime << " s" << std::endl;
+    std::cout << "Speedup: " << seqTime / parTime << "x" << std::endl;
+  } else {
+    std::cout << "Parallel runtime: " << parTime << " s" << std::endl;
+  }
 
   delete dist;
   return 0;
