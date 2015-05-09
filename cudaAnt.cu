@@ -12,7 +12,7 @@
 
 #include <math_functions.h>
 
-#include "cycleTimer.h"
+#include "CycleTimer.h"
 #include "ants.h"
 
 #define MAX_THREADS 256
@@ -21,21 +21,25 @@ __device__ static inline int toIndex(int i, int j) {
   return i * MAX_CITIES + j;
 }
 
-__device__ double cudaAntProduct(double *edges, double *phero, int from, int to) {
+__device__ static inline double cudaAntProduct(double *edges, double *phero, int from, int to) {
   // TODO: delete this when we're sure it's fixed
-  if (isinf(pow(1.0 / edges[toIndex(from, to)], BETA))) {
+  /*if (isinf(pow(1.0 / edges[toIndex(from, to)], BETA))) {
     printf("OH NO INFINITY: dist = %1.15f\n", edges[toIndex(from, to)]);
   }
-  /*if (pow(phero[toIndex(from, to)], ALPHA) * pow(1.0 / edges[toIndex(from, to)], BETA) == 0) {
+  if (pow(phero[toIndex(from, to)], ALPHA) * pow(1.0 / edges[toIndex(from, to)], BETA) == 0) {
     printf("I'M ZERO\n");
   }*/
 
   return (pow(phero[toIndex(from, to)], ALPHA) * pow(1.0 / edges[toIndex(from, to)], BETA));
 }
 
+__device__ static inline double edgeDist(double *edges, int from, int to) {
+  return edges[toIndex(from, to)];
+}
+
 __global__ void init_rand(curandState *state) {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  curand_init(1230, idx, 0, &state[idx]);
+  curand_init(418, idx, 0, &state[idx]);
 }
 
 __device__ void make_rand(curandState *state, double *randArray) {
@@ -101,9 +105,9 @@ __global__ void initPhero(double *phero) {
 }
 
 __global__ void copyBestPath(int i, int *bestPathResult, int *pathResults) {
-  memcpy(bestPathResult, pathResults + i * MAX_CITIES, MAX_CITIES * sizeof(int));                                  
+  memcpy(bestPathResult, pathResults + i * MAX_CITIES, MAX_CITIES * sizeof(int));
 }
-                                 
+
 __global__ void constructAntTour(double *edges, double *phero,
                                  curandState *state, double *randArray,
                                  double *tourResults, int *pathResults) {
@@ -122,7 +126,7 @@ __global__ void constructAntTour(double *edges, double *phero,
     double localCityProb[citiesPerThread];
 
     if (threadIdx.x == 0) {
-      make_rand(state, randArray); 
+      make_rand(state, randArray);
       current_city = randArray[antId * blockDim.x + threadIdx.x] * MAX_CITIES;
       num_visited = 1;
       tour_length = 0.0;
@@ -170,19 +174,29 @@ __global__ void constructAntTour(double *edges, double *phero,
       //printf("BESTCITIES: %d\n", localCity + startCityIndex);
       __syncthreads();
 
-      //reduce over cityProb and randomly pick a city based on
-      //those probabilities
+      //reduce over bestCities and pick city with best absolute heuristic
       if (threadIdx.x == 0) {
-        int nextIndex = selectCity(state, randArray, cityProb, MAX_THREADS);
+        double best_distance = MAX_DIST * 2;
+        int next_city = -1;
+        for (int i = 0; i < MAX_THREADS; i++) {
+          double distance = edgeDist(edges, current_city, bestCities[i]);
+          if (cityProb[i] > 0 && distance < best_distance) {
+            best_distance = distance;
+            next_city = bestCities[i];
+          }
+        }
+        /*if (next_city == -1) {
+          printf("OH NO\n");
+        }*/
+        //int nextIndex = selectCity(state, randArray, cityProb, MAX_THREADS);
         /*if (antId == 0) {
           printf("next city index: %d\n", nextIndex);
           printf("next city prob: %1.15f\n", cityProb[nextIndex]);
         }*/
-        int next_city = bestCities[nextIndex];
+        //int next_city = bestCities[nextIndex];
         tour_length += edges[toIndex(current_city, next_city)];
         pathResults[antId * MAX_CITIES + num_visited] = next_city;
         num_visited++;
-        //path[num_visited++] = next_city;
         current_city = next_city;
         tabu[current_city] = 1;
       }
@@ -194,7 +208,6 @@ __global__ void constructAntTour(double *edges, double *phero,
     if (threadIdx.x == 0) {
       tour_length += edges[toIndex(current_city, pathResults[antId * MAX_CITIES])];
       tourResults[antId] = tour_length;
-      //memcpy(pathResults + antId * MAX_CITIES, path, MAX_CITIES * sizeof(int));
     }
 }
 
@@ -301,6 +314,7 @@ double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   dim3 numCityBlocks((MAX_CITIES + MAX_THREADS - 1) / MAX_THREADS);
   dim3 numPheroBlocks((MAX_CITIES * MAX_CITIES / 2 + MAX_THREADS - 1) / MAX_THREADS);
   dim3 threadsPerBlock(MAX_THREADS);
+  dim3 single(1);
 
   int best_index = -1;
   double best = (double) MAX_TOUR;
@@ -337,14 +351,14 @@ double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   double sEnd;
   for (int i = 0; i < MAX_TOURS; i++) {
     best_index = -1;
-    
+
     sBegin = CycleTimer::currentSeconds();
     constructAntTour<<<numAntBlocks, threadsPerBlock>>>(deviceEdges, phero, randState, randArray, tourResults, pathResults);
     cudaThreadSynchronize();
     sEnd = CycleTimer::currentSeconds();
-    
+
     pathTime += (sEnd - sBegin);
-    
+
     cudaMemcpy(copiedTourResults, tourResults, sizeof(double) * MAX_ANTS,
                cudaMemcpyDeviceToHost);
 
@@ -367,20 +381,20 @@ double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
     evaporatePheromones<<<numCityBlocks, threadsPerBlock>>>(phero);
     cudaThreadSynchronize();
 
-    //TODO: pheromone update
-    updateTrails<<<numAntBlocks, threadsPerBlock>>>(phero, pathResults, tourResults); 
+    //pheromone update
+    updateTrails<<<numAntBlocks, threadsPerBlock>>>(phero, pathResults, tourResults);
     cudaThreadSynchronize();
     sEnd = CycleTimer::currentSeconds();
     pheroTime += (sEnd - sBegin);
   }
-  
+
   printf("PATHTIME: %f, PHEROTIME: %f\n", pathTime, pheroTime);
 
   cudaMemcpy(bestPath,
              bestPathResult,
              MAX_CITIES * sizeof(int),
              cudaMemcpyDeviceToHost);
-  
+
   cudaFree(bestPathResult);
   cudaFree(pathResults);
   cudaFree(tourResults);
