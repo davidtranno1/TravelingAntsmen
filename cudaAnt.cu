@@ -93,8 +93,10 @@ __device__ int calculateTo(int i){
 }
 
 __global__ void initPhero(double *phero) {
-  for(int i = 0; i < MAX_CITIES * MAX_CITIES; i++){
-    phero[i] = INIT_PHER;
+  int idx = blockIdx.x * MAX_THREADS + threadIdx.x;
+  if (idx < MAX_CITIES * MAX_CITIES / 2) {
+    phero[idx] = INIT_PHER;
+    phero[MAX_CITIES * MAX_CITIES - idx] = INIT_PHER;
   }
 }
 
@@ -220,28 +222,27 @@ __global__ void updateTrails(double *phero, int *paths, double *tourLengths)
 {
   //int antId = threadIdx.x;
   int from, to;
- 
+
   __shared__ int numPhero;
   __shared__ int blockStartPhero;
-  
+
   if (threadIdx.x == 0) {
     numPhero = (((MAX_CITIES * MAX_CITIES) / 2) + (MAX_THREADS * MAX_ANTS - 1))
                / (MAX_THREADS * MAX_ANTS);
     blockStartPhero = numPhero * MAX_THREADS * blockIdx.x;
   }
-  
+
   __syncthreads();
-  
+
   int cur_phero;
-  // TODO: need to be atomic
   for (int i = 0; i < MAX_ANTS; i++) {
     for (int j = 0; j < numPhero; j++) {
       cur_phero = blockStartPhero + j + numPhero * threadIdx.x;
-      
+
       if (cur_phero >= (MAX_CITIES * MAX_CITIES) / 2) {
         break;
       }
-      
+
       from = calculateFrom(cur_phero); //triangle number thing
       to = calculateTo(cur_phero);
       bool touched = false;
@@ -254,16 +255,16 @@ __global__ void updateTrails(double *phero, int *paths, double *tourLengths)
         } else {
           checkTo = paths[toIndex(i, 0)];
         }
-        
+
         //printf("NEW VALUE: to: %d, from: %d", to, from);
         if ((checkFrom == from && checkTo == to) ||
-            (checkFrom == to && checkTo == from)) 
+            (checkFrom == to && checkTo == from))
         {
           touched = true;
-          break;      
+          break;
         }
       }
-      
+
       if (touched) {
         phero[toIndex(from, to)] += (QVAL / tourLengths[i]);
         phero[toIndex(from, to)] *= RHO;
@@ -274,7 +275,7 @@ __global__ void updateTrails(double *phero, int *paths, double *tourLengths)
       }
     }
   }
-  
+
   /*for (int i = 0; i < MAX_CITIES; i++) {
     if (i < MAX_CITIES - 1) {
       from = paths[toIndex(antId, i)];
@@ -298,8 +299,8 @@ __global__ void updateTrails(double *phero, int *paths, double *tourLengths)
 double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   dim3 numAntBlocks(MAX_ANTS);
   dim3 numCityBlocks((MAX_CITIES + MAX_THREADS - 1) / MAX_THREADS);
+  dim3 numPheroBlocks((MAX_CITIES * MAX_CITIES / 2 + MAX_THREADS - 1) / MAX_THREADS);
   dim3 threadsPerBlock(MAX_THREADS);
-  dim3 single(1);
 
   int best_index = -1;
   double best = (double) MAX_TOUR;
@@ -328,7 +329,7 @@ double cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   cudaMemcpy(deviceEdges, dist->get_array(), sizeof(double) * MAX_CITIES * MAX_CITIES,
              cudaMemcpyHostToDevice);
 
-  initPhero<<<single, single>>>(phero);
+  initPhero<<<numPheroBlocks, threadsPerBlock>>>(phero);
 
   double pathTime = 0;
   double pheroTime = 0;
