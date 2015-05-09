@@ -21,7 +21,7 @@ __device__ static inline int toIndex(int i, int j) {
   return i * MAX_CITIES + j;
 }
 
-__device__ static inline float cudaAntProduct(float *edges, float *phero, int from, int to) {
+__device__ static inline float cudaAntProduct(float *edges, float *phero, int city) {
   // TODO: delete this when we're sure it's fixed
   /*if (isinf(pow(1.0 / edges[toIndex(from, to)], BETA))) {
     printf("OH NO INFINITY: dist = %1.15f\n", edges[toIndex(from, to)]);
@@ -30,11 +30,7 @@ __device__ static inline float cudaAntProduct(float *edges, float *phero, int fr
     printf("I'M ZERO\n");
   }*/
 
-  return (powf(phero[toIndex(from, to)], ALPHA) * powf(1.0 / edges[toIndex(from, to)], BETA));
-}
-
-__device__ static inline float edgeDist(float *edges, int from, int to) {
-  return edges[toIndex(from, to)];
+  return (powf(phero[city], ALPHA) * powf(1.0 / edges[city], BETA));
 }
 
 __global__ void init_rand(curandState *state) {
@@ -85,7 +81,7 @@ __device__ int selectCity(curandState *state, float *randArray, float *start, in
   }
 
   printf("warning: acc did not reach luckyNumber in selectNextCity\n");
-  printf("acc: %1.15f, luckyNumber: %1.15f\n", acc, luckyNumber);
+  printf("sum: %1.15f, acc: %1.15f, luckyNumber: %1.15f\n", sum, acc, luckyNumber);
   return lastBestIndex;
 }
 
@@ -120,17 +116,24 @@ __global__ void copyBestPath(int i, int *bestPathResult, int *pathResults) {
 __global__ void constructAntTour(float *edges, float *phero,
                                  curandState *state, float *randArray,
                                  float *tourResults, int *pathResults) {
-    __shared__ int tabu[MAX_CITIES]; //TODO: put in register wtf is that
+    __shared__ bool tabu[MAX_CITIES]; //TODO: put in register wtf is that
     //__shared__ int path[MAX_CITIES];
     __shared__ int current_city;
     __shared__ int num_visited;
-    __shared__ float tour_length;
     __shared__ int bestCities[MAX_THREADS];
     __shared__ float cityProb[MAX_THREADS];
+
+    __shared__ float localEdges[MAX_CITIES];
+    __shared__ float localPhero[MAX_CITIES];
 
     const int citiesPerThread = (MAX_CITIES + MAX_THREADS - 1) / MAX_THREADS;
     int startCityIndex = threadIdx.x * citiesPerThread;
     int antId = blockIdx.x;
+    float tour_length;
+
+    if (startCityIndex >= MAX_THREADS) {
+      return;
+    }
 
     float localCityProb[citiesPerThread];
 
@@ -139,7 +142,7 @@ __global__ void constructAntTour(float *edges, float *phero,
       current_city = randArray[antId * blockDim.x + threadIdx.x] * MAX_CITIES;
       num_visited = 1;
       tour_length = 0.0;
-      tabu[current_city] = 1;
+      tabu[current_city] = true;
       pathResults[antId * MAX_CITIES] = current_city;
     }
     __syncthreads();
@@ -151,7 +154,7 @@ __global__ void constructAntTour(float *edges, float *phero,
         break;
       }
       if (city != current_city) {
-        tabu[city] = 0;
+        tabu[city] = false;
       }
     }
 
@@ -159,17 +162,47 @@ __global__ void constructAntTour(float *edges, float *phero,
 
     //check if we have finished the tour
     while (num_visited != MAX_CITIES) {
+
+      int tile;
+      if (startCityIndex + citiesPerThread >= MAX_CITIES) {
+        tile = MAX_CITIES - startCityIndex;
+      } else {
+        tile = citiesPerThread;
+      }
+
+      if (startCityIndex < MAX_CITIES) {
+        memcpy(&localEdges[startCityIndex], &edges[current_city * MAX_CITIES + startCityIndex], tile * sizeof(float));
+        memcpy(&localPhero[startCityIndex], &phero[current_city * MAX_CITIES + startCityIndex], tile * sizeof(float));
+      }
+      /*for (int i = 0; i < citiesPerThread; i++) {
+        int city = i + startCityIndex;
+
+        if (city < MAX_CITIES) {
+          localEdges[city] = edges[current_city * MAX_CITIES + city];
+          localPhero[city] = phero[current_city * MAX_CITIES + city];
+        }
+      }*/
+      /*if (threadIdx.x == 0) {
+        for (int i = 0; i < MAX_CITIES; i++) {
+          localEdges[i] = edges[current_city * MAX_CITIES + i];
+          localPhero[i] = phero[current_city * MAX_CITIES + i];
+        }
+      }*/
+      __syncthreads();
+
       //pick next (unvisited) city
       for (int i = 0; i < citiesPerThread; i++) {
         int city = i + startCityIndex;
 
-        if (city >= MAX_CITIES || tabu[city] != 0) {
+        if (city >= MAX_CITIES || tabu[city]) {
           localCityProb[i] = 0.0;
         } else {
-          localCityProb[i] = cudaAntProduct(edges, phero, current_city, city);
+          localCityProb[i] = cudaAntProduct(localEdges, localPhero, city);
           //printf("city prob: %1.15f\n", localCityProb[i]);
         }
       }
+      //if (threadIdx.x == 0)
+      //  printf("cuda ant product done\n");
 
       //for each thread, look through cities and stochastically select one
       int localCity = selectCity(state, randArray, localCityProb, citiesPerThread);
@@ -185,10 +218,12 @@ __global__ void constructAntTour(float *edges, float *phero,
 
       //reduce over bestCities and pick city with best absolute heuristic
       if (threadIdx.x == 0) {
+        //printf("best cities done in block %d\n", blockIdx.x);
         float best_distance = MAX_DIST * 2;
         int next_city = -1;
-        for (int i = 0; i < MAX_THREADS; i++) {
-          float distance = edgeDist(edges, current_city, bestCities[i]);
+        for (int i = 0; i < MAX_THREADS && i < MAX_CITIES; i++) {
+          //printf("best city[%d]: %d\n", i, bestCities[i]);
+          float distance = localEdges[bestCities[i]];
           if (cityProb[i] > 0 && distance < best_distance) {
             best_distance = distance;
             next_city = bestCities[i];
@@ -203,11 +238,11 @@ __global__ void constructAntTour(float *edges, float *phero,
           printf("next city prob: %1.15f\n", cityProb[nextIndex]);
         }*/
         //int next_city = bestCities[nextIndex];
-        tour_length += edges[toIndex(current_city, next_city)];
+        tour_length += localEdges[next_city];
         pathResults[antId * MAX_CITIES + num_visited] = next_city;
         num_visited++;
         current_city = next_city;
-        tabu[current_city] = 1;
+        tabu[current_city] = true;
       }
 
       __syncthreads(); //TODO: move this syncthreads?

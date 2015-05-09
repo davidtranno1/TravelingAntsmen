@@ -15,7 +15,7 @@ FRAMEWORKS += OpenGL GLUT
 LDFLAGS=-L/usr/local/cuda/lib/ -lcudart
 else
 # Building on Linux
-NVCCFLAGS=-O3 -m64 -arch compute_20
+NVCCFLAGS=-O3 -m64 -arch sm_20
 LIBS += GL glut cudart
 LDFLAGS=-L/usr/local/cuda/lib64/ -lcudart
 endif
