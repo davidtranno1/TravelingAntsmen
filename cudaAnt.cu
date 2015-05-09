@@ -111,8 +111,15 @@ __global__ void initPhero(float *phero) {
 }
 
 __global__ void copyBestPath(int i, int *bestPathResult, int *pathResults) {
-  memcpy(bestPathResult, pathResults + i * MAX_CITIES, MAX_CITIES * sizeof(int));
+  memcpy(bestPathResult, &pathResults[i * MAX_ANTS], MAX_CITIES * sizeof(int));
 }
+
+/*__global__ void printBestPath(int *bestPathResult) {
+  printf("current best path\n");
+  for (int i = 0; i < MAX_CITIES; i++) {
+    printf("%d, ", bestPathResult[i]);
+  }
+}*/
 
 __global__ void constructAntTour(float *edges, float *phero,
                                  curandState *state, float *randArray,
@@ -238,6 +245,9 @@ __global__ void constructAntTour(float *edges, float *phero,
         /*if (next_city == -1) {
           printf("OH NO\n");
         }*/
+        /*if (antId == 0) {
+          printf("current: %d, next: %d\n", current_city, next_city);
+        }*/
         tour_length += localEdges[next_city];
         pathResults[antId * MAX_CITIES + num_visited] = next_city;
         num_visited++;
@@ -256,8 +266,12 @@ __global__ void constructAntTour(float *edges, float *phero,
 }
 
 // Evaporate pheromones along each edge
+// TODO: FIX TILING BUG
 __global__ void evaporatePheromones(float *phero) {
   int cityId = blockDim.x * blockIdx.x + threadIdx.x;
+  if (cityId >= MAX_CITIES) {
+    return;
+  }
 
   for (int to = 0; to < MAX_CITIES; to++) {
     if (cityId == to) {
@@ -364,7 +378,7 @@ float cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   dim3 threadsPerBlock(MAX_THREADS);
   dim3 single(1);
 
-  int best_index = -1;
+  int best_index;
   float best = (float) MAX_TOUR;
 
   // allocate host memory
@@ -421,7 +435,7 @@ float cuda_ACO(EdgeMatrix *dist, int *bestPath) {
 
     //copy the corresponding tour for the best ant
     if (best_index != -1) {
-      copyBestPath<<<single, single>>> (best_index, bestPathResult, pathResults);
+      copyBestPath<<<single, single>>>(best_index, bestPathResult, pathResults);
     }
 
     //evaporate pheromones in parallel
@@ -438,10 +452,7 @@ float cuda_ACO(EdgeMatrix *dist, int *bestPath) {
 
   printf("PATHTIME: %f, PHEROTIME: %f\n", pathTime, pheroTime);
 
-  cudaMemcpy(bestPath,
-             bestPathResult,
-             MAX_CITIES * sizeof(int),
-             cudaMemcpyDeviceToHost);
+  cudaMemcpy(bestPath, bestPathResult, MAX_CITIES * sizeof(int), cudaMemcpyDeviceToHost);
 
   cudaFree(bestPathResult);
   cudaFree(pathResults);
