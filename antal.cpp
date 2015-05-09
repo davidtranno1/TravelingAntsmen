@@ -13,16 +13,16 @@ struct antType {
   int curCity, nextCity, pathIndex;
   int tabu[MAX_CITIES];
   int path[MAX_CITIES];
-  double tourLength;
+  float tourLength;
 };
 
 // runtime structures and global variables
 antType ants[MAX_ANTS];
 
 EdgeMatrix *dist;
-double phero[MAX_CITIES][MAX_CITIES];
+float phero[MAX_CITIES][MAX_CITIES];
 
-double best = (double) MAX_TOUR;
+float best = (float) MAX_TOUR;
 int bestIndex;
 
 // initializes the entire graph
@@ -79,13 +79,13 @@ void restartAnts() {
   }
 }
 
-double antProduct(int from, int to) {
+float antProduct(int from, int to) {
   return (pow(phero[from][to], ALPHA) * pow((1.0 / (*dist)[from][to]), BETA));
 }
 
 int selectNextCity(int ant) {
   int from = ants[ant].curCity;
-  double sum = 0.0;
+  float sum = 0.0;
 
   for (int to = 0; to < MAX_CITIES; to++) {
     if (ants[ant].tabu[to] == 0) {
@@ -93,8 +93,8 @@ int selectNextCity(int ant) {
     }
   }
 
-  double acc = 0;
-  double luckyNumber = (double)rand() / RAND_MAX;
+  float acc = 0;
+  float luckyNumber = (float)rand() / RAND_MAX;
 
   for (int to = 0; to < MAX_CITIES; to++) {
     if (ants[ant].tabu[to] == 0) {
@@ -179,7 +179,7 @@ void updateTrails()
   }
 }
 
-double seq_ACO(EdgeMatrix *d, int *bestPath) {
+float seq_ACO(EdgeMatrix *d, int *bestPath) {
   dist = d;
   int curTime = 0;
   int success = 0;

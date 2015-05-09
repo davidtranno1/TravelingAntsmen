@@ -11,8 +11,8 @@
 #include "CycleTimer.h"
 #include "ants.h"
 
-extern double cuda_ACO(EdgeMatrix *dist, int *bestPath);
-extern double seq_ACO(EdgeMatrix *dist, int *bestPath);
+extern float cuda_ACO(EdgeMatrix *dist, int *bestPath);
+extern float seq_ACO(EdgeMatrix *dist, int *bestPath);
 
 
 // Construct TSP graph
@@ -32,7 +32,7 @@ void constructTSP(cityType *cities, EdgeMatrix *dist) {
       int yd = pow(abs(cities[from].y - cities[to].y), 2);
 
       // if both cities lie on top of each other, manually set edge weight to 1
-      double edge_dist = sqrt(xd + yd);
+      float edge_dist = sqrt(xd + yd);
       if (sqrt(xd + yd) == 0) {
         edge_dist = 1;
       }
@@ -87,8 +87,8 @@ bool checkTourUnique(int *path) {
 }
 
 // Check if path is a legitimate tour (correct distance)
-bool checkTourLength(int *path, EdgeMatrix *dist, double length) {
-  double distance = 0.0;
+bool checkTourLength(int *path, EdgeMatrix *dist, float length) {
+  float distance = 0.0;
 
   for (int i = 0; i < MAX_CITIES; i++) {
     distance += (*dist)[path[i]][path[(i+1) % MAX_CITIES]];
@@ -111,12 +111,12 @@ int main() {
   saveCityDataFile(cities);
 
   // Sequential algorithm
-  double startTime, endTime;
+  float startTime, endTime;
   std::cout << "Running sequential ant algorithm..." << std::endl;
   startTime = CycleTimer::currentSeconds();
-  double seqTourLength = seq_ACO(dist, seqPath);
+  float seqTourLength = seq_ACO(dist, seqPath);
   endTime = CycleTimer::currentSeconds();
-  double seqTime = endTime - startTime;
+  float seqTime = endTime - startTime;
   std::cout << "Found tour of length " << seqTourLength << std::endl;
   if (!checkTourUnique(seqPath)) {
     std::cout << "Error: invalid tour (repeated cities!)" << std::endl;
@@ -129,9 +129,9 @@ int main() {
   // Parallel algorithm
   std::cout << "Running parallel ant algorithm..." << std::endl;
   startTime = CycleTimer::currentSeconds();
-  double parTourLength = cuda_ACO(dist, parPath);
+  float parTourLength = cuda_ACO(dist, parPath);
   endTime = CycleTimer::currentSeconds();
-  double parTime = endTime - startTime;
+  float parTime = endTime - startTime;
   std::cout << "Found tour of length " << parTourLength << std::endl;
   if (!checkTourUnique(parPath)) {
     std::cout << "Error: invalid tour (repeated cities!)" << std::endl;

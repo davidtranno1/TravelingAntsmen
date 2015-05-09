@@ -11,19 +11,19 @@ struct cityType {
 
 // allows edge queries as a 2D array
 class EdgeMatrix {
-  double *dist;
+  float *dist;
 public:
   EdgeMatrix() {
-    dist = new double[MAX_CITIES * MAX_CITIES];
+    dist = new float[MAX_CITIES * MAX_CITIES];
   }
   ~EdgeMatrix() {
     delete dist;
   }
-  double* operator[](unsigned int i) {
+  float* operator[](unsigned int i) {
     return &dist[MAX_CITIES * i];
   }
 
-  double *get_array(){
+  float *get_array(){
     return dist;
   }
 };
