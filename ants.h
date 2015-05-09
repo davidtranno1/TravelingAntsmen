@@ -1,12 +1,9 @@
 // Traveling Antsmen constants and struct declarations
-#include <algorithm>
 
 #define MAX_CITIES 300 // eventually test on 250-800
 #define MAX_DIST 100
 #define MAX_TOUR (MAX_CITIES * MAX_DIST)
 #define MAX_ANTS MAX_CITIES
-#define NUM_EDGES ((MAX_CITIES * MAX_CITIES - MAX_CITIES) / 2)
-
 
 struct cityType {
   int x, y;
@@ -17,27 +14,13 @@ class EdgeMatrix {
   float *dist;
 public:
   EdgeMatrix() {
-    dist = new float[NUM_EDGES];
+    dist = new float[MAX_CITIES * MAX_CITIES];
   }
   ~EdgeMatrix() {
     delete dist;
   }
-
-  /* Edges are stored as an array of size (n^2 + n) / 2, with indices:
-   * 0
-   * 1 2
-   * 3 4 5
-   * 6 7 8 9
-   */
-  float edge(unsigned int x, unsigned int y) {
-    unsigned int i = std::max(x, y) - 1;
-    unsigned int j = std::min(x, y);
-    return dist[(i * (i + 1) / 2) + j];
-  }
-  void set_edge(unsigned int x, unsigned int y, float value) {
-    unsigned int i = std::max(x, y) - 1;
-    unsigned int j = std::min(x, y);
-    dist[(i * (i + 1) / 2) + j] = value;
+  float* operator[](unsigned int i) {
+    return &dist[MAX_CITIES * i];
   }
 
   float *get_array(){
