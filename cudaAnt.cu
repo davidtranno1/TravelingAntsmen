@@ -15,7 +15,7 @@
 #include "CycleTimer.h"
 #include "ants.h"
 
-#define MAX_THREADS 256
+#define MAX_THREADS 128
 
 __device__ static inline int toIndex(int i, int j) {
   return i * MAX_CITIES + j;
@@ -28,8 +28,11 @@ __device__ static inline float cudaAntProduct(float *edges, float *phero, int ci
   }
   if (pow(phero[toIndex(from, to)], ALPHA) * pow(1.0 / edges[toIndex(from, to)], BETA) == 0) {
     printf("I'M ZERO\n");
+  }
+  if (isnan(phero[city])) {
+    printf("IS NAN\n");
+    return 0;
   }*/
-
   return (powf(phero[city], ALPHA) * powf(1.0 / edges[city], BETA));
 }
 
@@ -38,7 +41,7 @@ __global__ void init_rand(curandState *state) {
   curand_init(418, idx, 0, &state[idx]);
 }
 
-__device__ void make_rand(curandState *state, float *randArray) {
+__device__ static inline void make_rand(curandState *state, float *randArray) {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
   randArray[idx] = curand_uniform(&state[idx]);
 }
@@ -56,6 +59,10 @@ __device__ int selectCity(curandState *state, float *randArray, float *start, in
   }
 
   if (sum == 0.0) {
+    return 0;
+  }
+  if (isnan(sum)) {
+    printf("error; value is nan!\n");
     return 0;
   }
 
@@ -80,46 +87,38 @@ __device__ int selectCity(curandState *state, float *randArray, float *start, in
     }
   }
 
-  printf("warning: acc did not reach luckyNumber in selectNextCity\n");
-  printf("sum: %1.15f, acc: %1.15f, luckyNumber: %1.15f\n", sum, acc, luckyNumber);
+  //printf("warning: acc did not reach luckyNumber in selectNextCity\n");
+  //printf("sum: %1.15f, acc: %1.15f, luckyNumber: %1.15f\n", sum, acc, luckyNumber);
   return lastBestIndex;
 }
 
-// TODO: get rid of triangular number code
-__device__ int calculateFrom(int i){
+__device__ static inline int calculateFrom(int i) {
   //find least triangle number less than i
-  int row = (-1 + (sqrt((float)(1 + 8 * i)))) / 2;
-  int tnum = (row * (row + 1)) / 2;
+  int row = (int)(-1 + (sqrt((float)(1 + 8 * i)))) >> 1;
+  int tnum = (row * (row + 1)) >> 1;
   int remain = i - tnum;
-  return remain;
+  return MAX_CITIES - 1 - remain;
 }
 
-__device__ int calculateTo(int i){
+__device__ static inline int calculateTo(int i) {
   //find least triangle number less than i
-  int row = (-1 + (sqrt((float)(1 + 8 * i)))) / 2;
-  int tnum = (row * (row + 1)) / 2;
+  int row = (int)(-1 + (sqrt((float)(1 + 8 * i)))) >> 1;
+  int tnum = (row * (row + 1)) >> 1;
   int remain = i - tnum;
-  return MAX_CITIES - (row - remain) - 1;
+  return row - remain;
 }
 
 __global__ void initPhero(float *phero) {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  if (idx < NUM_EDGES) {
-    phero[idx] = INIT_PHER;
-    phero[MAX_CITIES * MAX_CITIES - idx] = INIT_PHER;
+  if (idx >= MAX_CITIES * MAX_CITIES) {
+    return;
   }
+  phero[idx] = INIT_PHER;
 }
 
 __global__ void copyBestPath(int i, int *bestPathResult, int *pathResults) {
   memcpy(bestPathResult, &pathResults[i * MAX_ANTS], MAX_CITIES * sizeof(int));
 }
-
-/*__global__ void printBestPath(int *bestPathResult) {
-  printf("current best path\n");
-  for (int i = 0; i < MAX_CITIES; i++) {
-    printf("%d, ", bestPathResult[i]);
-  }
-}*/
 
 __global__ void constructAntTour(float *edges, float *phero,
                                  curandState *state, float *randArray,
@@ -179,25 +178,9 @@ __global__ void constructAntTour(float *edges, float *phero,
       } else {
         tile = citiesPerThread;
       }
+      memcpy(&localEdges[startCityIndex], &edges[current_city * MAX_CITIES + startCityIndex], tile * sizeof(float));
+      memcpy(&localPhero[startCityIndex], &phero[current_city * MAX_CITIES + startCityIndex], tile * sizeof(float));
 
-      //if (startCityIndex < MAX_CITIES) {
-        memcpy(&localEdges[startCityIndex], &edges[current_city * MAX_CITIES + startCityIndex], tile * sizeof(float));
-        memcpy(&localPhero[startCityIndex], &phero[current_city * MAX_CITIES + startCityIndex], tile * sizeof(float));
-      //}
-      /*for (int i = 0; i < citiesPerThread; i++) {
-        int city = i + startCityIndex;
-
-        if (city < MAX_CITIES) {
-          localEdges[city] = edges[current_city * MAX_CITIES + city];
-          localPhero[city] = phero[current_city * MAX_CITIES + city];
-        }
-      }*/
-      /*if (threadIdx.x == 0) {
-        for (int i = 0; i < MAX_CITIES; i++) {
-          localEdges[i] = edges[current_city * MAX_CITIES + i];
-          localPhero[i] = phero[current_city * MAX_CITIES + i];
-        }
-      }*/
       __syncthreads();
 
       //pick next (unvisited) city
@@ -267,36 +250,21 @@ __global__ void constructAntTour(float *edges, float *phero,
 
 // Evaporate pheromones along each edge
 __global__ void evaporatePheromones(float *phero) {
-  /*__shared__ int numPhero;
-  __shared__ int blockStartPhero;
-
-  if (threadIdx.x == 0) {
-    numPhero = (NUM_EDGES + (MAX_THREADS - 1)) / MAX_THREADS;
-    blockStartPhero = numPhero * blockDim.x * blockIdx.x;
+  int current_phero = blockIdx.x * blockDim.x + threadIdx.x;
+  if (current_phero >= NUM_EDGES) {
+    return;
   }
+  int from = calculateFrom(current_phero); //triangle number thing
+  int to = calculateTo(current_phero);
 
-  __syncthreads();
-
-  for (int i = 0; i < numPhero; i++) {
-    int cur_phero = blockStartPhero + i + numPhero * threadIdx.x;
-    if (cur_phero >= NUM_EDGES) {
-      break;
-    }
-
-    int from = calculateFrom(cur_phero); //triangle number thing
-    int to = calculateTo(cur_phero);
-    if (from == to) {
-      continue;
-    }
-    */
-  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  int idx = toIndex(from, to);
   if (idx < NUM_EDGES) {
     phero[idx] *= 1.0 - RHO;
 
     if (phero[idx] < 0.0) {
       phero[idx] = INIT_PHER;
     }
-    phero[MAX_CITIES * MAX_CITIES - idx] = phero[idx];
+    phero[toIndex(to, from)] = phero[idx];
   }
 }
 
@@ -305,21 +273,32 @@ __global__ void evaporatePheromones(float *phero) {
 __global__ void updateTrails(float *phero, int *paths, float *tourLengths)
 {
   //int antId = threadIdx.x;
+  //__shared__ float localPaths[MAX_CITIES];
+
+  int numPhero = (NUM_EDGES + (blockDim.x * (MAX_ANTS * 2) - 1)) /
+                 (blockDim.x * (MAX_ANTS * 2));
+  int blockStartPhero = numPhero * blockDim.x * blockIdx.x;
   int from, to;
-
-  __shared__ int numPhero;
-  __shared__ int blockStartPhero;
-
-  if (threadIdx.x == 0) {
-    numPhero = (NUM_EDGES + (MAX_THREADS * MAX_ANTS - 1))
-               / (MAX_THREADS * MAX_ANTS);
-    blockStartPhero = numPhero * blockDim.x * blockIdx.x;
-  }
-
-  __syncthreads();
 
   int cur_phero;
   for (int i = 0; i < MAX_ANTS; i++) {
+    // For each ant, cache paths in shared memory
+    /*int tile;
+    if (startCityIndex + citiesPerThread >= MAX_CITIES) {
+      tile = MAX_CITIES - startCityIndex;
+    } else {
+      tile = citiesPerThread;
+    }
+    memcpy(&localPaths[startCityIndex], &paths[i * MAX_CITIES + startCityIndex], tile * sizeof(float));
+    */
+    // TODO: figure out tiling
+    /*if (threadIdx.x == 0) {
+      memcpy(&localPaths, &paths[i * MAX_CITIES], MAX_CITIES * sizeof(float));
+    }
+
+    __syncthreads();
+    */
+
     for (int j = 0; j < numPhero; j++) {
       cur_phero = blockStartPhero + j + numPhero * threadIdx.x;
 
@@ -329,9 +308,6 @@ __global__ void updateTrails(float *phero, int *paths, float *tourLengths)
 
       from = calculateFrom(cur_phero); //triangle number thing
       to = calculateTo(cur_phero);
-      if (from == to) {
-        continue;
-      }
 
       bool touched = false;
       int checkTo;
@@ -363,31 +339,15 @@ __global__ void updateTrails(float *phero, int *paths, float *tourLengths)
         }*/
       }
     }
+    //__syncthreads();
   }
-
-  /*for (int i = 0; i < MAX_CITIES; i++) {
-    if (i < MAX_CITIES - 1) {
-      from = paths[toIndex(antId, i)];
-      to = paths[toIndex(antId, i+1)];
-    } else {
-      from = paths[toIndex(antId, i)];
-      to = paths[toIndex(antId, 0)];
-    }
-
-    phero[toIndex(from, to)] += (QVAL / tourLengths[antId]);
-    phero[toIndex(to, from)] = phero[toIndex(from, to)];
-  }
-
-  for (from = 0; from < MAX_CITIES; from++) {
-    for (to = 0; to < MAX_CITIES; to++) {
-      phero[toIndex(from, to)] *= RHO;
-    }
-  }*/
 }
 
 float cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   dim3 numAntBlocks(MAX_ANTS);
+  dim3 numTwoAntBlocks(MAX_ANTS * 2);
   dim3 numCityBlocks((MAX_CITIES + MAX_THREADS - 1) / MAX_THREADS);
+  dim3 numEdgesBlocks((MAX_CITIES * MAX_CITIES + MAX_THREADS - 1) / MAX_THREADS);
   dim3 numPheroBlocks((NUM_EDGES + MAX_THREADS - 1) / MAX_THREADS);
   dim3 threadsPerBlock(MAX_THREADS);
   dim3 single(1);
@@ -419,7 +379,8 @@ float cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   cudaMemcpy(deviceEdges, dist->get_array(), sizeof(float) * MAX_CITIES * MAX_CITIES,
              cudaMemcpyHostToDevice);
 
-  initPhero<<<numPheroBlocks, threadsPerBlock>>>(phero);
+  initPhero<<<numEdgesBlocks, threadsPerBlock>>>(phero);
+  cudaThreadSynchronize();
 
   float pathTime = 0;
   float pheroTime = 0;
@@ -453,12 +414,13 @@ float cuda_ACO(EdgeMatrix *dist, int *bestPath) {
     }
 
     //evaporate pheromones in parallel
+    //printf("Evaporating pheromones\n");
     sBegin = CycleTimer::currentSeconds();
     evaporatePheromones<<<numPheroBlocks, threadsPerBlock>>>(phero);
     cudaThreadSynchronize();
 
     //pheromone update
-    updateTrails<<<numAntBlocks, threadsPerBlock>>>(phero, pathResults, tourResults);
+    updateTrails<<<numTwoAntBlocks, threadsPerBlock>>>(phero, pathResults, tourResults);
     cudaThreadSynchronize();
     sEnd = CycleTimer::currentSeconds();
     pheroTime += (sEnd - sBegin);
