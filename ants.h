@@ -4,7 +4,7 @@
 #define MAX_DIST 100
 #define MAX_TOUR (MAX_CITIES * MAX_DIST)
 #define MAX_ANTS MAX_CITIES
-#define NUM_EDGES ((MAX_CITIES * MAX_CITIES - MAX_CITIES) / 2)
+#define NUM_EDGES (MAX_CITIES * MAX_CITIES / 2)
 
 struct cityType {
   int x, y;

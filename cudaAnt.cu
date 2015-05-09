@@ -104,7 +104,7 @@ __device__ int calculateTo(int i){
 
 __global__ void initPhero(float *phero) {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  if (idx < MAX_CITIES * MAX_CITIES / 2) {
+  if (idx < NUM_EDGES) {
     phero[idx] = INIT_PHER;
     phero[MAX_CITIES * MAX_CITIES - idx] = INIT_PHER;
   }
@@ -266,24 +266,37 @@ __global__ void constructAntTour(float *edges, float *phero,
 }
 
 // Evaporate pheromones along each edge
-// TODO: FIX TILING BUG
 __global__ void evaporatePheromones(float *phero) {
-  int cityId = blockDim.x * blockIdx.x + threadIdx.x;
-  if (cityId >= MAX_CITIES) {
-    return;
+  /*__shared__ int numPhero;
+  __shared__ int blockStartPhero;
+
+  if (threadIdx.x == 0) {
+    numPhero = (NUM_EDGES + (MAX_THREADS - 1)) / MAX_THREADS;
+    blockStartPhero = numPhero * blockDim.x * blockIdx.x;
   }
 
-  for (int to = 0; to < MAX_CITIES; to++) {
-    if (cityId == to) {
-      continue;
+  __syncthreads();
+
+  for (int i = 0; i < numPhero; i++) {
+    int cur_phero = blockStartPhero + i + numPhero * threadIdx.x;
+    if (cur_phero >= NUM_EDGES) {
+      break;
     }
 
-    int idx = toIndex(cityId, to);
+    int from = calculateFrom(cur_phero); //triangle number thing
+    int to = calculateTo(cur_phero);
+    if (from == to) {
+      continue;
+    }
+    */
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < NUM_EDGES) {
     phero[idx] *= 1.0 - RHO;
 
     if (phero[idx] < 0.0) {
       phero[idx] = INIT_PHER;
     }
+    phero[MAX_CITIES * MAX_CITIES - idx] = phero[idx];
   }
 }
 
@@ -298,7 +311,7 @@ __global__ void updateTrails(float *phero, int *paths, float *tourLengths)
   __shared__ int blockStartPhero;
 
   if (threadIdx.x == 0) {
-    numPhero = (((MAX_CITIES * MAX_CITIES) / 2) + (MAX_THREADS * MAX_ANTS - 1))
+    numPhero = (NUM_EDGES + (MAX_THREADS * MAX_ANTS - 1))
                / (MAX_THREADS * MAX_ANTS);
     blockStartPhero = numPhero * blockDim.x * blockIdx.x;
   }
@@ -310,7 +323,7 @@ __global__ void updateTrails(float *phero, int *paths, float *tourLengths)
     for (int j = 0; j < numPhero; j++) {
       cur_phero = blockStartPhero + j + numPhero * threadIdx.x;
 
-      if (cur_phero >= (MAX_CITIES * MAX_CITIES) / 2) {
+      if (cur_phero >= NUM_EDGES) {
         break;
       }
 
@@ -341,9 +354,10 @@ __global__ void updateTrails(float *phero, int *paths, float *tourLengths)
       }
 
       if (touched) {
-        phero[toIndex(from, to)] += (QVAL / tourLengths[i]);
-        phero[toIndex(from, to)] *= RHO;
-        phero[toIndex(to, from)] = phero[toIndex(from, to)];
+        int idx = toIndex(from, to);
+        phero[idx] += (QVAL / tourLengths[i]);
+        phero[idx] *= RHO;
+        phero[toIndex(to, from)] = phero[idx];
         /*if (i == 0) {
           printf("NEW VALUE: to: %d, from: %d, value: %f\n", to, from, phero[toIndex(to, from)]);
         }*/
@@ -374,7 +388,7 @@ __global__ void updateTrails(float *phero, int *paths, float *tourLengths)
 float cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   dim3 numAntBlocks(MAX_ANTS);
   dim3 numCityBlocks((MAX_CITIES + MAX_THREADS - 1) / MAX_THREADS);
-  dim3 numPheroBlocks((MAX_CITIES * MAX_CITIES / 2 + MAX_THREADS - 1) / MAX_THREADS);
+  dim3 numPheroBlocks((NUM_EDGES + MAX_THREADS - 1) / MAX_THREADS);
   dim3 threadsPerBlock(MAX_THREADS);
   dim3 single(1);
 
@@ -440,7 +454,7 @@ float cuda_ACO(EdgeMatrix *dist, int *bestPath) {
 
     //evaporate pheromones in parallel
     sBegin = CycleTimer::currentSeconds();
-    evaporatePheromones<<<numCityBlocks, threadsPerBlock>>>(phero);
+    evaporatePheromones<<<numPheroBlocks, threadsPerBlock>>>(phero);
     cudaThreadSynchronize();
 
     //pheromone update
