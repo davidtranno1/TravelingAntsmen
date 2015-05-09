@@ -80,7 +80,7 @@ __device__ int selectCity(curandState *state, float *randArray, float *start, in
   return 0;
 }
 
-__device__ int calculateFrom(int i){
+__device__ static inline int calculateFrom(int i){
   //find least triangle number less than i
   int row = (-1 + (sqrt((float)(1 + 8 * i)))) / 2;
   int tnum = (row * (row + 1)) / 2;
@@ -88,7 +88,7 @@ __device__ int calculateFrom(int i){
   return remain;
 }
 
-__device__ int calculateTo(int i){
+__device__ static inline int calculateTo(int i){
   //find least triangle number less than i
   int row = (-1 + (sqrt((float)(1 + 8 * i)))) / 2;
   int tnum = (row * (row + 1)) / 2;

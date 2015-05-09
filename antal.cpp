@@ -20,7 +20,7 @@ struct antType {
 antType ants[MAX_ANTS];
 
 EdgeMatrix *dist;
-float phero[MAX_CITIES][MAX_CITIES];
+EdgeMatrix phero;
 
 float best = (float) MAX_TOUR;
 int bestIndex;
@@ -31,8 +31,8 @@ void init() {
 
   // creating cities
   for (from = 0; from < MAX_CITIES; from++) {
-    for (to = 0; to < MAX_CITIES; to++) {
-      phero[from][to] = INIT_PHER;
+    for (to = 0; to < from; to++) {
+      phero.set_edge(from, to, INIT_PHER);
     }
   }
 
@@ -80,7 +80,7 @@ void restartAnts() {
 }
 
 float antProduct(int from, int to) {
-  return (pow(phero[from][to], ALPHA) * pow((1.0 / (*dist)[from][to]), BETA));
+  return (pow(phero.edge(from, to), ALPHA) * pow(1.0 / dist->edge(from, to), BETA));
 }
 
 int selectNextCity(int ant) {
@@ -91,6 +91,11 @@ int selectNextCity(int ant) {
     if (ants[ant].tabu[to] == 0) {
       sum += antProduct(from, to);
     }
+  }
+
+  if (sum == 0) {
+    printf("ERROR: zero sum in selectNextCity\n");
+    return 0;
   }
 
   float acc = 0;
@@ -107,6 +112,7 @@ int selectNextCity(int ant) {
   }
 
   //should not get here
+  printf("acc: %f, luckyNumber: %f\n", acc, luckyNumber);
   printf("ERROR: failed to select next city\n");
   return 0;
 }
@@ -123,11 +129,11 @@ int simulateAnts() {
       ants[k].tabu[ants[k].nextCity] = 1;
       ants[k].path[ants[k].pathIndex++] = ants[k].nextCity;
 
-      ants[k].tourLength += (*dist)[ants[k].curCity][ants[k].nextCity];
+      ants[k].tourLength += dist->edge(ants[k].curCity, ants[k].nextCity);
 
       //handle last case->last city to first
       if (ants[k].pathIndex == MAX_CITIES) {
-        ants[k].tourLength += (*dist)[ants[k].path[MAX_CITIES -1]][ants[k].path[0]];
+        ants[k].tourLength += dist->edge(ants[k].path[MAX_CITIES -1], ants[k].path[0]);
       }
 
       ants[k].curCity = ants[k].nextCity;
@@ -145,13 +151,11 @@ void updateTrails()
 
   // Pheromone Evaporation
   for (from = 0; from < MAX_CITIES; from++) {
-    for (to = 0; to < MAX_CITIES; to++) {
-      if (from != to) {
-        phero[from][to] *= 1.0 - RHO;
+    for (to = 0; to < from; to++) {
+      phero.set_edge(from, to, phero.edge(from, to) * (1.0 - RHO));
 
-        if (phero[from][to] < 0.0) {
-          phero[from][to] = INIT_PHER;
-        }
+      if (phero.edge(from, to) < 0.0) {
+        phero.set_edge(from, to, INIT_PHER);
       }
     }
   }
@@ -167,14 +171,13 @@ void updateTrails()
         to = ants[ant].path[0];
       }
 
-      phero[from][to] += (QVAL / ants[ant].tourLength);
-      phero[to][from] = phero[from][to];
+      phero.set_edge(from, to, phero.edge(from, to) + (QVAL / ants[ant].tourLength));
     }
   }
 
   for (from = 0; from < MAX_CITIES; from++) {
-    for (to = 0; to < MAX_CITIES; to++) {
-      phero[from][to] *= RHO;
+    for (to = 0; to < from; to++) {
+      phero.set_edge(from, to, phero.edge(from, to) * RHO);
     }
   }
 }

@@ -25,9 +25,7 @@ void constructTSP(cityType *cities, EdgeMatrix *dist) {
 
   // Compute distances between cities (edge weights)
   for (int from = 0; from < MAX_CITIES; from++) {
-    (*dist)[from][from] = 0.0;
-
-    for (int to = from + 1; to < MAX_CITIES; to++) {
+    for (int to = 0; to < from; to++) {
       int xd = pow(abs(cities[from].x - cities[to].x), 2);
       int yd = pow(abs(cities[from].y - cities[to].y), 2);
 
@@ -36,8 +34,7 @@ void constructTSP(cityType *cities, EdgeMatrix *dist) {
       if (sqrt(xd + yd) == 0) {
         edge_dist = 1;
       }
-      (*dist)[from][to] = edge_dist;
-      (*dist)[to][from] = edge_dist;
+      dist->set_edge(from, to, edge_dist);
     }
   }
 }
@@ -91,7 +88,7 @@ bool checkTourLength(int *path, EdgeMatrix *dist, float length) {
   float distance = 0.0;
 
   for (int i = 0; i < MAX_CITIES; i++) {
-    distance += (*dist)[path[i]][path[(i+1) % MAX_CITIES]];
+    distance += dist->edge(path[i], path[(i+1) % MAX_CITIES]);
   }
 
   return distance == length;
@@ -127,7 +124,7 @@ int main() {
   savePathDataFile(seqPath, (char *)"path_seq.txt");
 
   // Parallel algorithm
-  std::cout << "Running parallel ant algorithm..." << std::endl;
+  /*std::cout << "Running parallel ant algorithm..." << std::endl;
   startTime = CycleTimer::currentSeconds();
   float parTourLength = cuda_ACO(dist, parPath);
   endTime = CycleTimer::currentSeconds();
@@ -147,10 +144,11 @@ int main() {
   } else {
     std::cout << "Uh oh! Found two different tours..." << std::endl;
   }
+  */
   std::cout << std::endl;
   std::cout << "Sequential runtime: " << seqTime << " s" << std::endl;
-  std::cout << "Parallel runtime: " << parTime << " s" << std::endl;
-  std::cout << "Speedup: " << seqTime / parTime << "x" << std::endl;
+  //std::cout << "Parallel runtime: " << parTime << " s" << std::endl;
+  //std::cout << "Speedup: " << seqTime / parTime << "x" << std::endl;
 
   delete dist;
   return 0;
