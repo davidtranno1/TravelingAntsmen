@@ -10,10 +10,10 @@
 
 // stores ant data (visited cities and current path)
 struct antType {
-  int curCity, nextCity, pathIndex;
-  int tabu[MAX_CITIES];
   int path[MAX_CITIES];
+  bool tabu[MAX_CITIES];
   float tourLength;
+  int curCity, nextCity, pathIndex;
 };
 
 // runtime structures and global variables
@@ -27,25 +27,19 @@ int bestIndex;
 
 // initializes the entire graph
 void init() {
-  int from, to, ant;
 
-  for (from = 0; from < MAX_CITIES; from++) {
-    for (to = 0; to < MAX_CITIES; to++) {
+  for (int from = 0; from < MAX_CITIES; from++) {
+    for (int to = 0; to < MAX_CITIES; to++) {
       phero[from][to] = INIT_PHER;
     }
   }
 
   // initializing the ants
-  to = 0;
-  for (ant = 0; ant < MAX_ANTS; ant++) {
-    if (to == MAX_CITIES) {
-      to = 0;
-    }
-
-    ants[ant].curCity = to++;
-    for (from = 0; from < MAX_CITIES; from++) {
+  for (int ant = 0; ant < MAX_ANTS; ant++) {
+    ants[ant].curCity = rand() % MAX_CITIES;
+    for (int from = 0; from < MAX_CITIES; from++) {
       ants[ant].tabu[from] = 0;
-      ants[ant].path[from] = -1;
+      //ants[ant].path[from] = -1;
     }
 
     ants[ant].pathIndex = 1;
@@ -77,9 +71,9 @@ void restartAnts() {
 }
 
 float antProduct(int from, int to) {
-  if (isnan((*dist)[from][to])) {
+  /*if (isnan((*dist)[from][to])) {
     printf("NAN (%d, %d)\n", from, to);
-  }
+  }*/
   return (pow(phero[from][to], ALPHA) * pow((1.0 / (*dist)[from][to]), BETA));
 }
 
@@ -133,13 +127,11 @@ void simulateAnts(int k) {
 
     ants[k].tourLength += (*dist)[ants[k].curCity][ants[k].nextCity];
 
-    //handle last case->last city to first
-    if (ants[k].pathIndex == MAX_CITIES) {
-      ants[k].tourLength += (*dist)[ants[k].path[MAX_CITIES -1]][ants[k].path[0]];
-    }
-
     ants[k].curCity = ants[k].nextCity;
   }
+  
+  //handle last case->last city to first
+  ants[k].tourLength += (*dist)[ants[k].path[MAX_CITIES -1]][ants[k].path[0]];
 }
 
 // Updating trails
@@ -184,7 +176,6 @@ void updateTrails()
 
 float seq_ACO(EdgeMatrix *d, int *bestPath) {
   dist = d;
-  int curTime = 0;
   float pathTime = 0;
   float pheroTime = 0;
   float sBegin, sEnd;
@@ -193,7 +184,7 @@ float seq_ACO(EdgeMatrix *d, int *bestPath) {
 
   init();
 
-  while (curTime++ < MAX_TOURS) {
+  for (int curTime = 0; curTime < MAX_TOURS; curTime++) {
     bestIndex = -1;
     sBegin = CycleTimer::currentSeconds();
    
@@ -221,11 +212,9 @@ float seq_ACO(EdgeMatrix *d, int *bestPath) {
     sEnd = CycleTimer::currentSeconds();
     pheroTime += sEnd - sBegin;
 
-    if (curTime != MAX_TIME) {
+    if (curTime != MAX_TOURS - 1) {
       restartAnts();
     }
-
-    //cout << "\nTime is " << curTime << "(" << best << ")";
   }
 
   printf("PATHTIME: %f, PHEROTIME: %f\n", pathTime, pheroTime);

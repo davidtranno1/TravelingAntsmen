@@ -34,6 +34,6 @@ public:
 #define BETA 1.0 // this parameter raises the weight of distance over pheromone
 #define RHO 0.1 // evaporation rate
 #define QVAL 1
-#define MAX_TOURS 15
+#define MAX_TOURS 300
 #define MAX_TIME (MAX_TOURS * MAX_CITIES)
 #define INIT_PHER (1.0 / MAX_CITIES)

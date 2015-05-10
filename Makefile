@@ -2,7 +2,8 @@ EXECUTABLE := main
 LOGS       := logs
 LIBS       :=
 FRAMEWORKS :=
-
+GRAPH      := a280
+ 
 ARCH=$(shell uname | sed -e 's/-.*//g')
 OBJDIR=objs
 CXX=g++ -m64
@@ -47,8 +48,8 @@ $(OBJDIR)/%.o: %.cu
 		$(NVCC) $< $(NVCCFLAGS) -c -o $@
 
 run:
-	./main -g a280
+	./main -g $(GRAPH)
 
 par:
-	./main -p -g a280
+	./main -p -g $(GRAPH)
 	
