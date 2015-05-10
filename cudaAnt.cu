@@ -258,18 +258,48 @@ __global__ void evaporatePheromones(float *phero) {
   int to = calculateTo(current_phero);
 
   int idx = toIndex(from, to);
-  if (idx < NUM_EDGES) {
-    phero[idx] *= 1.0 - RHO;
+  phero[idx] *= 1.0 - RHO;
 
-    if (phero[idx] < 0.0) {
-      phero[idx] = INIT_PHER;
-    }
-    phero[toIndex(to, from)] = phero[idx];
+  if (phero[idx] < 0.0) {
+    phero[idx] = INIT_PHER;
   }
+  phero[toIndex(to, from)] = phero[idx];
 }
 
 
 // Add new pheromone to the trails
+__global__ void updateTrailsAtomic(float *phero, int *paths, float *tourLengths)
+{
+  int antId = blockIdx.x;
+  int from, to;
+
+  for (int i = 0; i < MAX_CITIES; i++) {
+    from = paths[toIndex(antId, i)];
+    if (i < MAX_CITIES - 1) {
+      to = paths[toIndex(antId, i+1)];
+    } else {
+      to = paths[toIndex(antId, 0)];
+    }
+
+    if (from < to) {
+      int tmp = from;
+      from = to;
+      to = tmp;
+    }
+    atomicAdd(&phero[toIndex(from, to)], QVAL / tourLengths[antId]);
+    //atomicExch(&phero[toIndex(to, from)], phero[toIndex(from, to)]);
+  }
+}
+
+__global__ void updateSymmetricPhero(float *phero) {
+  for (int i = 0; i < MAX_CITIES; i++) {
+    for (int j = 0; j < i; j++) {
+      //phero[toIndex(i, j)] *= RHO;
+      phero[toIndex(j, i)] = phero[toIndex(i, j)];
+    }
+  }
+}
+
 __global__ void updateTrails(float *phero, int *paths, float *tourLengths)
 {
   //int antId = threadIdx.x;
@@ -343,6 +373,51 @@ __global__ void updateTrails(float *phero, int *paths, float *tourLengths)
   }
 }
 
+
+__global__ void checkPhero(float *pheroSeq, float *phero) {
+  for (int i = 0; i < MAX_CITIES; i++) {
+    for (int j = 0; j < MAX_CITIES; j++) {
+      if (i == j) continue;
+      int idx = toIndex(i, j);
+      if (fabsf(pheroSeq[idx] - phero[idx]) > 0.001) {
+        printf("PHERO IS BROKEN at (%d, %d); expected: %1.15f, actual: %1.15f\n", i, j, pheroSeq[idx], phero[idx]);
+      }
+    }
+  }
+}
+__global__ void seqPheroUpdate(float *phero, float *pheroReal, int *paths, float *tourLengths) {
+  memcpy(phero, pheroReal, sizeof(float) * MAX_CITIES * MAX_CITIES);
+
+  int from, to;
+  // evaporate
+  for (from = 0; from < MAX_CITIES; from++) {
+    for (to = 0; to < from; to++) {
+      phero[toIndex(from, to)] *= 1.0 - RHO;
+
+      if (phero[toIndex(from, to)] < 0.0) {
+        phero[toIndex(from, to)] = INIT_PHER;
+      }
+      phero[toIndex(to, from)] = phero[toIndex(from, to)];
+    }
+  }
+
+  //Add new pheromone to the trails
+  for (int ant = 0; ant < MAX_ANTS; ant++) {
+    for (int i = 0; i < MAX_CITIES; i++) {
+      from = paths[toIndex(ant, i)];
+      if (i < MAX_CITIES - 1) {
+        to = paths[toIndex(ant, i+1)];
+      } else {
+        to = paths[toIndex(ant, 0)];
+      }
+
+      phero[toIndex(from, to)] += (QVAL / tourLengths[ant]);
+      phero[toIndex(to, from)] = phero[toIndex(from, to)];
+    }
+  }
+
+}
+
 float cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   dim3 numAntBlocks(MAX_ANTS);
   dim3 numTwoAntBlocks(MAX_ANTS * 2);
@@ -364,6 +439,7 @@ float cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   int *bestPathResult;
   float *deviceEdges;
   float *phero;
+  float *testPhero;
   float *randArray;
   curandState *randState;
 
@@ -371,6 +447,7 @@ float cuda_ACO(EdgeMatrix *dist, int *bestPath) {
   cudaMalloc((void**)&tourResults, sizeof(float) * MAX_ANTS);
   cudaMalloc((void**)&deviceEdges, sizeof(float) * MAX_CITIES * MAX_CITIES);
   cudaMalloc((void**)&phero, sizeof(float) * MAX_CITIES * MAX_CITIES);
+  cudaMalloc((void**)&testPhero, sizeof(float) * MAX_CITIES * MAX_CITIES);
   cudaMalloc(&randState, sizeof(curandState) * MAX_ANTS * MAX_THREADS);
   cudaMalloc((void**)&randArray, sizeof(float) * MAX_ANTS * MAX_THREADS);
   cudaMalloc((void**)&bestPathResult, sizeof(int) * MAX_CITIES);
@@ -413,17 +490,24 @@ float cuda_ACO(EdgeMatrix *dist, int *bestPath) {
       copyBestPath<<<single, single>>>(best_index, bestPathResult, pathResults);
     }
 
+    //seqPheroUpdate<<<single, single>>>(testPhero, phero, pathResults, tourResults);
+    //cudaThreadSynchronize();
+
     //evaporate pheromones in parallel
-    //printf("Evaporating pheromones\n");
     sBegin = CycleTimer::currentSeconds();
     evaporatePheromones<<<numPheroBlocks, threadsPerBlock>>>(phero);
     cudaThreadSynchronize();
 
     //pheromone update
-    updateTrails<<<numTwoAntBlocks, threadsPerBlock>>>(phero, pathResults, tourResults);
+    updateTrailsAtomic<<<numAntBlocks, single>>>(phero, pathResults, tourResults);
+    cudaThreadSynchronize();
+    updateSymmetricPhero<<<single, single>>>(phero);
     cudaThreadSynchronize();
     sEnd = CycleTimer::currentSeconds();
     pheroTime += (sEnd - sBegin);
+
+    //checkPhero<<<single, single>>>(testPhero, phero);
+    //cudaThreadSynchronize();
   }
 
   printf("PATHTIME: %f, PHEROTIME: %f\n", pathTime, pheroTime);

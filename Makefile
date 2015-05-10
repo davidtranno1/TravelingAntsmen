@@ -29,7 +29,7 @@ OBJS=$(OBJDIR)/main.o $(OBJDIR)/antal.o $(OBJDIR)/cudaAnt.o
 
 .PHONY: dirs clean run par
 
-default: $(EXECUTABLE) run
+default: $(EXECUTABLE) par
 
 dirs:
 		mkdir -p $(OBJDIR)/

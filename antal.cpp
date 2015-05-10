@@ -71,7 +71,7 @@ void restartAnts() {
       //ants[ant].path[i] = -1;
     }
 
-    ants[ant].curCity = to++;
+    ants[ant].curCity = rand() % MAX_CITIES;//to++;
     ants[ant].pathIndex = 1;
     ants[ant].path[0] = ants[ant].curCity;
     ants[ant].tabu[ants[ant].curCity] = 1;
@@ -166,11 +166,10 @@ void updateTrails()
   //Add new pheromone to the trails
   for (ant = 0; ant < MAX_ANTS; ant++) {
     for (i = 0; i < MAX_CITIES; i++) {
+      from = ants[ant].path[i];
       if (i < MAX_CITIES - 1) {
-        from = ants[ant].path[i];
         to = ants[ant].path[i+1];
       } else {
-        from = ants[ant].path[i];
         to = ants[ant].path[0];
       }
 
