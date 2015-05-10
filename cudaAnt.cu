@@ -332,7 +332,7 @@ __global__ void updateTrails(float *phero, int *paths, float *tourLengths)
       if (touched) {
         int idx = toIndex(from, to);
         phero[idx] += (QVAL / tourLengths[i]);
-        phero[idx] *= RHO;
+        //phero[idx] *= RHO;
         phero[toIndex(to, from)] = phero[idx];
         /*if (i == 0) {
           printf("NEW VALUE: to: %d, from: %d, value: %f\n", to, from, phero[toIndex(to, from)]);

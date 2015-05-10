@@ -15,7 +15,7 @@ FRAMEWORKS += OpenGL GLUT
 LDFLAGS=-L/usr/local/cuda/lib/ -lcudart
 else
 # Building on Linux
-NVCCFLAGS=-O3 -m64 -arch sm_20
+NVCCFLAGS=-O3 -m64 -arch sm_20 #--ptxas-options=-v
 LIBS += GL glut cudart
 LDFLAGS=-L/usr/local/cuda/lib64/ -lcudart
 endif
@@ -29,7 +29,7 @@ OBJS=$(OBJDIR)/main.o $(OBJDIR)/antal.o $(OBJDIR)/cudaAnt.o
 
 .PHONY: dirs clean run par
 
-default: $(EXECUTABLE) par
+default: $(EXECUTABLE) run
 
 dirs:
 		mkdir -p $(OBJDIR)/

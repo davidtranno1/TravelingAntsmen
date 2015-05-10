@@ -120,7 +120,7 @@ int main(int argc, char *argv[]) {
   int seqPath[MAX_CITIES];
   int parPath[MAX_CITIES];
 
-  std::cout.precision(6);
+  std::cout.precision(12);
   std::cout << "Constructing graph..." << std::endl;
   constructTSP(cities, dist);
   saveCityDataFile(cities);

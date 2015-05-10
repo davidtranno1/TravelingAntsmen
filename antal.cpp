@@ -29,7 +29,6 @@ int bestIndex;
 void init() {
   int from, to, ant;
 
-  // creating cities
   for (from = 0; from < MAX_CITIES; from++) {
     for (to = 0; to < MAX_CITIES; to++) {
       phero[from][to] = INIT_PHER;
@@ -69,7 +68,7 @@ void restartAnts() {
 
     for (i = 0; i < MAX_CITIES; i++) {
       ants[ant].tabu[i] = 0;
-      ants[ant].path[i] = -1;
+      //ants[ant].path[i] = -1;
     }
 
     ants[ant].curCity = to++;
@@ -123,13 +122,11 @@ int selectNextCity(int ant) {
 }
 
 int simulateAnts() {
-  int k;
   int moving = 0;
 
-  for (k = 0; k < MAX_ANTS; k++) {
+  for (int k = 0; k < MAX_ANTS; k++) {
     // check if there are any more cities to visit
-
-    if(ants[k].pathIndex < MAX_CITIES) {
+    if (ants[k].pathIndex < MAX_CITIES) {
       ants[k].nextCity = selectNextCity(k);
       ants[k].tabu[ants[k].nextCity] = 1;
       ants[k].path[ants[k].pathIndex++] = ants[k].nextCity;
@@ -156,14 +153,13 @@ void updateTrails()
 
   // Pheromone Evaporation
   for (from = 0; from < MAX_CITIES; from++) {
-    for (to = 0; to < MAX_CITIES; to++) {
-      if (from != to) {
-        phero[from][to] *= 1.0 - RHO;
+    for (to = 0; to < from; to++) {
+      phero[from][to] *= 1.0 - RHO;
 
-        if (phero[from][to] < 0.0) {
-          phero[from][to] = INIT_PHER;
-        }
+      if (phero[from][to] < 0.0) {
+        phero[from][to] = INIT_PHER;
       }
+      phero[to][from] = phero[from][to];
     }
   }
 
@@ -183,19 +179,21 @@ void updateTrails()
     }
   }
 
-  for (from = 0; from < MAX_CITIES; from++) {
-    for (to = 0; to < MAX_CITIES; to++) {
+  /*for (from = 0; from < MAX_CITIES; from++) {
+    for (to = 0; to < from; to++) {
       phero[from][to] *= RHO;
+      phero[to][from] *= RHO;
     }
-  }
+  }*/
 }
 
 float seq_ACO(EdgeMatrix *d, int *bestPath) {
   dist = d;
   int curTime = 0;
   int success = 0;
-  //cout << "S-ACO:";
-  //cout << "MaxTime=" << MAX_TIME;
+  float pathTime = 0;
+  float pheroTime = 0;
+  float sBegin, sEnd;
 
   srand(time(NULL));
 
@@ -203,7 +201,11 @@ float seq_ACO(EdgeMatrix *d, int *bestPath) {
 
   while (curTime++ < MAX_TIME) {
     bestIndex = -1;
+    sBegin = CycleTimer::currentSeconds();
     success = simulateAnts();
+    sEnd = CycleTimer::currentSeconds();
+    pathTime += sEnd - sBegin;
+
     if (success == 0) {
       for (int ant = 0; ant < MAX_ANTS; ant++) {
         if (ants[ant].tourLength < best) {
@@ -217,7 +219,10 @@ float seq_ACO(EdgeMatrix *d, int *bestPath) {
         memcpy(bestPath, ants[bestIndex].path, sizeof(int) * MAX_CITIES);
       }
 
+      sBegin = CycleTimer::currentSeconds();
       updateTrails();
+      sEnd = CycleTimer::currentSeconds();
+      pheroTime += sEnd - sBegin;
 
       if (curTime != MAX_TIME) {
         restartAnts();
@@ -227,5 +232,6 @@ float seq_ACO(EdgeMatrix *d, int *bestPath) {
     }
   }
 
+  printf("PATHTIME: %f, PHEROTIME: %f\n", pathTime, pheroTime);
   return best;
 }
