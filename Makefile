@@ -29,7 +29,7 @@ OBJS=$(OBJDIR)/main.o $(OBJDIR)/antal.o $(OBJDIR)/cudaAnt.o
 
 .PHONY: dirs clean run par
 
-default: $(EXECUTABLE) par
+default: $(EXECUTABLE)
 
 dirs:
 		mkdir -p $(OBJDIR)/
@@ -47,7 +47,7 @@ $(OBJDIR)/%.o: %.cu
 		$(NVCC) $< $(NVCCFLAGS) -c -o $@
 
 run:
-	./main
+	./main -g att532
 
 par:
-	./main -p -g pr1002
+	./main -p -g att532

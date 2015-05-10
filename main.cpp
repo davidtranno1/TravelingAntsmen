@@ -17,18 +17,41 @@
 extern float cuda_ACO(EdgeMatrix *dist, int *bestPath);
 extern float seq_ACO(EdgeMatrix *dist, int *bestPath);
 
+float euclideanDistance(int x1, int x2, int y1, int y2) {
+  int xd = x1 - x2;
+  int yd = y1 - y2;
+  return (int) (sqrt(xd * xd + yd * yd) + 0.5);
+}
+
+float pseudoEuclideanDistance(int x1, int x2, int y1, int y2) {
+  int xd = x1 - x2;
+  int yd = y1 - y2;
+  float rij = sqrt((xd * xd + yd * yd) / 10.0);
+  return ceil(rij);
+}
 
 // Construct TSP graph
 void constructTSP(std::string graph, cityType *cities, EdgeMatrix *dist) {
   // Load cities from file
   std::ifstream infile(("graphs/" + graph + ".tsp").c_str());
   std::string line;
+  bool euclidean = true; // whether to run EUC_2D or ATT distance metric
 
   int city, x, y;
+  bool reading_nodes = false;
   while (std::getline(infile, line)) {
     std::istringstream iss(line);
-    if (iss >> city >> x >> y) {
-      //printf("city: %d, x: %d, y: %d\n", city-1, x, y);
+    std::string word;
+    if (!reading_nodes) {
+      iss >> word;
+      if (word.compare("EDGE_WEIGHT_TYPE") == 0) {
+        iss >> word >> word;
+        std::cout << "edge type: " << word << std::endl;
+        euclidean = !word.compare("EUC_2D");
+      } else if (word.compare("NODE_COORD_SECTION") == 0) {
+        reading_nodes = true;
+      }
+    } else if (iss >> city >> x >> y) {
       cities[city-1].x = x;
       cities[city-1].y = y;
     }
@@ -40,14 +63,16 @@ void constructTSP(std::string graph, cityType *cities, EdgeMatrix *dist) {
     (*dist)[from][from] = 0.0;
 
     for (int to = from + 1; to < MAX_CITIES; to++) {
-      int xd = pow(abs(cities[from].x - cities[to].x), 2);
-      int yd = pow(abs(cities[from].y - cities[to].y), 2);
-
-      // if both cities lie on top of each other, manually set edge weight to 1
-      float edge_dist = sqrt(xd + yd);
-      if (sqrt(xd + yd) == 0) {
-        edge_dist = 1;
+      float edge_dist;
+      if (euclidean) {
+        edge_dist = euclideanDistance(cities[from].x, cities[to].x, cities[from].y, cities[to].y);
+      } else {
+        edge_dist = pseudoEuclideanDistance(cities[from].x, cities[to].x, cities[from].y, cities[to].y);
       }
+      if (edge_dist == 0) {
+        edge_dist = 1.0;
+      }
+      //printf("edge[%d][%d] = %f\n", from, to, edge_dist);
       (*dist)[from][to] = edge_dist;
       (*dist)[to][from] = edge_dist;
     }
@@ -59,7 +84,7 @@ void savePathDataFile(int *path, char *filename)
   std::ofstream f1;
   f1.open(filename);
   for (int i = 0; i < MAX_CITIES; i++) {
-    f1 << path[i] << " ";
+    f1 << path[i] + 1 << " ";
   }
   f1 << std::endl;
   f1.close();
@@ -84,12 +109,12 @@ bool matchPaths(int *path1, int *path2) {
   return true;
 }
 
-bool checkTourSolution(std::string graph, EdgeMatrix *dist, float length) {
+float checkTourSolution(std::string graph, EdgeMatrix *dist) {
   // Load cities from file
   std::ifstream infile(("graphs/" + graph + ".opt.tour").c_str());
   if (!infile.good()) {
-    printf("no solution to verify\n");
-    return true;
+    printf("No solution to verify.\n");
+    return 0.0;
   }
   std::string line;
 
@@ -114,8 +139,7 @@ bool checkTourSolution(std::string graph, EdgeMatrix *dist, float length) {
   }
   infile.close();
 
-  printf("Shortest path. expected: %f, actual: %f\n", distance, length);
-  return distance == length;
+  return distance;
 }
 
 // Check if path is a legitimate tour (all unique vertices)
@@ -169,12 +193,14 @@ int main(int argc, char *argv[]) {
   int parPath[MAX_CITIES];
 
   std::cout.precision(12);
-  std::cout << "Constructing graph ""..." << std::endl;
+  std::cout << "Constructing graph " << graph << "..." << std::endl;
   constructTSP(graph, cities, dist);
+  float optimal_length = checkTourSolution(graph, dist);
 
   // Sequential algorithm
-  float startTime, endTime;
-  float seqTourLength, seqTime;
+  float startTime, endTime, parTime, seqTime;
+  float approximation;
+  float seqTourLength = -1;
   if (!par_only) {
     std::cout << "Running sequential ant algorithm..." << std::endl;
     startTime = CycleTimer::currentSeconds();
@@ -188,8 +214,9 @@ int main(int argc, char *argv[]) {
     if (!checkTourLength(seqPath, dist, seqTourLength)) {
       std::cout << "Error: invalid tour (length mismatch!)" << std::endl;
     }
-    if (!checkTourSolution(graph, dist, seqTourLength)) {
-      std::cout << "Error: tour does not match solution!" << std::endl;
+    if (optimal_length > 0) {
+      approximation = seqTourLength / optimal_length;
+      std::cout << "Observed " << approximation << "x optimal path" << std::endl;
     }
     savePathDataFile(seqPath, (char *)"path_seq.txt");
   }
@@ -199,7 +226,7 @@ int main(int argc, char *argv[]) {
   startTime = CycleTimer::currentSeconds();
   float parTourLength = cuda_ACO(dist, parPath);
   endTime = CycleTimer::currentSeconds();
-  float parTime = endTime - startTime;
+  parTime = endTime - startTime;
   std::cout << "Found tour of length " << parTourLength << std::endl;
   if (!checkTourUnique(parPath)) {
     std::cout << "Error: invalid tour (repeated cities!)" << std::endl;
@@ -207,18 +234,16 @@ int main(int argc, char *argv[]) {
   if (!checkTourLength(parPath, dist, parTourLength)) {
     std::cout << "Error: invalid tour (length mismatch!)" << std::endl;
   }
-  if (!checkTourSolution(graph, dist, parTourLength)) {
-    std::cout << "Error: tour does not match solution!" << std::endl;
+  if (optimal_length > 0) {
+    approximation = parTourLength / optimal_length;
+    std::cout << "Observed " << approximation << "x optimal path" << std::endl;
   }
   savePathDataFile(parPath, (char *)"path_par.txt");
 
   // check correctness and print data
   if (!par_only) {
-    if (seqTourLength == parTourLength && matchPaths(seqPath, parPath)) {
-      std::cout << "Correctness passed!" << std::endl;
-    } else {
-      std::cout << "Uh oh! Found two different tours..." << std::endl;
-    }
+    approximation = parTourLength / seqTourLength;
+    std::cout << "Parallel path is " << approximation << "x sequential path" << std::endl;
   }
   std::cout << std::endl;
   if (!par_only) {

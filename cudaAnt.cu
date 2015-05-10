@@ -29,8 +29,8 @@ __device__ static inline float cudaAntProduct(float *edges, float *phero, int ci
   if (pow(phero[toIndex(from, to)], ALPHA) * pow(1.0 / edges[toIndex(from, to)], BETA) == 0) {
     printf("I'M ZERO\n");
   }
-  if (isnan(phero[city])) {
-    printf("IS NAN\n");
+  if (isnan(powf(1.0 / edges[city], BETA))) {
+    printf("IS NAN: city %d\n", city);
     return 0;
   }*/
   return (powf(phero[city], ALPHA) * powf(1.0 / edges[city], BETA));
@@ -61,10 +61,10 @@ __device__ int selectCity(curandState *state, float *randArray, float *start, in
   if (sum == 0.0) {
     return 0;
   }
-  if (isnan(sum)) {
+  /*if (isnan(sum)) {
     printf("error; value is nan!\n");
     return 0;
-  }
+  }*/
 
   make_rand(state, randArray);
   float luckyNumber = (float)randArray[idx];
@@ -134,8 +134,8 @@ __global__ void constructAntTour(float *edges, float *phero,
     __shared__ float localPhero[MAX_CITIES];
 
     const int citiesPerThread = (MAX_CITIES + MAX_THREADS - 1) / MAX_THREADS;
-    int startCityIndex = threadIdx.x * citiesPerThread;
-    int antId = blockIdx.x;
+    const int startCityIndex = threadIdx.x * citiesPerThread;
+    const int antId = blockIdx.x;
     float tour_length;
 
     if (startCityIndex >= MAX_CITIES) {
@@ -211,6 +211,8 @@ __global__ void constructAntTour(float *edges, float *phero,
 
       //reduce over bestCities and pick city with best absolute heuristic
       if (threadIdx.x == 0) {
+        //int nextIndex = selectCity(state, randArray, cityProb, MAX_THREADS);
+        //int next_city = bestCities[nextIndex];
         //printf("best cities done in block %d\n", blockIdx.x);
         float best_distance = MAX_DIST * 2;
         int next_city = -1;
@@ -480,7 +482,7 @@ float cuda_ACO(EdgeMatrix *dist, int *bestPath) {
     for (int j = 0; j < MAX_ANTS; j++) {
       if (copiedTourResults[j] < best) {
         best = copiedTourResults[j];
-        printf("new best: %f\n", best);
+        printf("new best: %1.f\n", best);
         best_index = j;
       }
     }
