@@ -121,29 +121,24 @@ int selectNextCity(int ant) {
   return lastBestIndex;
 }
 
-int simulateAnts() {
-  int moving = 0;
-
-  for (int k = 0; k < MAX_ANTS; k++) {
+int simulateAnts(int k) {
+  //for (int k = 0; k < MAX_ANTS; k++) {
     // check if there are any more cities to visit
-    if (ants[k].pathIndex < MAX_CITIES) {
-      ants[k].nextCity = selectNextCity(k);
-      ants[k].tabu[ants[k].nextCity] = 1;
-      ants[k].path[ants[k].pathIndex++] = ants[k].nextCity;
+    
+  while(ants[k].pathIndex < MAX_CITIES) {
+    ants[k].nextCity = selectNextCity(k);
+    ants[k].tabu[ants[k].nextCity] = 1;
+    ants[k].path[ants[k].pathIndex++] = ants[k].nextCity;
 
-      ants[k].tourLength += (*dist)[ants[k].curCity][ants[k].nextCity];
+    ants[k].tourLength += (*dist)[ants[k].curCity][ants[k].nextCity];
 
-      //handle last case->last city to first
-      if (ants[k].pathIndex == MAX_CITIES) {
-        ants[k].tourLength += (*dist)[ants[k].path[MAX_CITIES -1]][ants[k].path[0]];
-      }
-
-      ants[k].curCity = ants[k].nextCity;
-      moving++;
+    //handle last case->last city to first
+    if (ants[k].pathIndex == MAX_CITIES) {
+      ants[k].tourLength += (*dist)[ants[k].path[MAX_CITIES -1]][ants[k].path[0]];
     }
-  }
 
-  return moving;
+    ants[k].curCity = ants[k].nextCity;
+  }
 }
 
 // Updating trails
@@ -199,37 +194,39 @@ float seq_ACO(EdgeMatrix *d, int *bestPath) {
 
   init();
 
-  while (curTime++ < MAX_TIME) {
+  while (curTime++ < MAX_TOURS) {
     bestIndex = -1;
     sBegin = CycleTimer::currentSeconds();
-    success = simulateAnts();
+   
+    for (int i = 0; i < MAX_ANTS; i++) {
+      simulateAnts(i);
+    }
+    
     sEnd = CycleTimer::currentSeconds();
     pathTime += sEnd - sBegin;
 
-    if (success == 0) {
-      for (int ant = 0; ant < MAX_ANTS; ant++) {
-        if (ants[ant].tourLength < best) {
-          best = ants[ant].tourLength;
-          printf("new best: %f\n", best);
-          bestIndex = ant;
-        }
+    for (int ant = 0; ant < MAX_ANTS; ant++) {
+      if (ants[ant].tourLength < best) {
+        best = ants[ant].tourLength;
+        printf("new best: %f\n", best);
+        bestIndex = ant;
       }
-
-      if (bestIndex != -1) {
-        memcpy(bestPath, ants[bestIndex].path, sizeof(int) * MAX_CITIES);
-      }
-
-      sBegin = CycleTimer::currentSeconds();
-      updateTrails();
-      sEnd = CycleTimer::currentSeconds();
-      pheroTime += sEnd - sBegin;
-
-      if (curTime != MAX_TIME) {
-        restartAnts();
-      }
-
-      //cout << "\nTime is " << curTime << "(" << best << ")";
     }
+
+    if (bestIndex != -1) {
+      memcpy(bestPath, ants[bestIndex].path, sizeof(int) * MAX_CITIES);
+    }
+
+    sBegin = CycleTimer::currentSeconds();
+    updateTrails();
+    sEnd = CycleTimer::currentSeconds();
+    pheroTime += sEnd - sBegin;
+
+    if (curTime != MAX_TIME) {
+      restartAnts();
+    }
+
+    //cout << "\nTime is " << curTime << "(" << best << ")";
   }
 
   printf("PATHTIME: %f, PHEROTIME: %f\n", pathTime, pheroTime);
