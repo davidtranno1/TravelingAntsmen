@@ -50,4 +50,4 @@ run:
 	./main
 
 par:
-	./main -p
+	./main -p -g pr1002

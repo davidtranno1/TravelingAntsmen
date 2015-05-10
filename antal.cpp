@@ -60,18 +60,16 @@ void init() {
 
 // reinitialize all ants and redistribute them
 void restartAnts() {
-  int ant, i, to = 0;
-
-  for (ant = 0; ant < MAX_ANTS; ant++) {
+  for (int ant = 0; ant < MAX_ANTS; ant++) {
     ants[ant].nextCity = -1;
     ants[ant].tourLength = 0.0;
 
-    for (i = 0; i < MAX_CITIES; i++) {
+    for (int i = 0; i < MAX_CITIES; i++) {
       ants[ant].tabu[i] = 0;
       //ants[ant].path[i] = -1;
     }
 
-    ants[ant].curCity = rand() % MAX_CITIES;//to++;
+    ants[ant].curCity = rand() % MAX_CITIES;
     ants[ant].pathIndex = 1;
     ants[ant].path[0] = ants[ant].curCity;
     ants[ant].tabu[ants[ant].curCity] = 1;
@@ -79,6 +77,9 @@ void restartAnts() {
 }
 
 float antProduct(int from, int to) {
+  if (isnan((*dist)[from][to])) {
+    printf("NAN (%d, %d)\n", from, to);
+  }
   return (pow(phero[from][to], ALPHA) * pow((1.0 / (*dist)[from][to]), BETA));
 }
 
@@ -117,7 +118,7 @@ int selectNextCity(int ant) {
 
   //if we get here (floating point errors), return last best city
   printf("warning: acc did not reach luckyNumber in selectNextCity\n");
-  printf("acc: %1.15f, luckyNumber: %1.15f\n", acc, luckyNumber);
+  printf("sum: %1.15f, acc: %1.15f, luckyNumber: %1.15f\n", sum, acc, luckyNumber);
   return lastBestIndex;
 }
 

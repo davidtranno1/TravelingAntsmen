@@ -1,7 +1,7 @@
 // Traveling Antsmen constants and struct declarations
 
-#define MAX_CITIES 100 // eventually test on 250-800
-#define MAX_DIST 100
+#define MAX_CITIES 1002 // eventually test on 250-800
+#define MAX_DIST 17000
 #define MAX_TOUR (MAX_CITIES * MAX_DIST)
 #define MAX_ANTS MAX_CITIES
 #define NUM_EDGES ((MAX_CITIES * MAX_CITIES - MAX_CITIES) / 2)
@@ -32,8 +32,8 @@ public:
 //Ant algorithm problem parameters
 #define ALPHA 4.0
 #define BETA 1.0 // this parameter raises the weight of distance over pheromone
-#define RHO 0.25 // evaporation rate
+#define RHO 0.1 // evaporation rate
 #define QVAL 1
-#define MAX_TOURS 50
+#define MAX_TOURS 100
 #define MAX_TIME (MAX_TOURS * MAX_CITIES)
 #define INIT_PHER (1.0 / MAX_CITIES)

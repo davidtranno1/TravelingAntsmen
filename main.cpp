@@ -7,6 +7,8 @@
 #include <math.h>
 #include <iostream>
 #include <fstream>
+#include <sstream>
+#include <string>
 #include <unistd.h>
 
 #include "CycleTimer.h"
@@ -17,12 +19,21 @@ extern float seq_ACO(EdgeMatrix *dist, int *bestPath);
 
 
 // Construct TSP graph
-void constructTSP(cityType *cities, EdgeMatrix *dist) {
-  // Create cities with random x, y coordinates
-  for (int city = 0; city < MAX_CITIES; city++) {
-    cities[city].x = rand() % MAX_DIST;
-    cities[city].y = rand() % MAX_DIST;
+void constructTSP(std::string graph, cityType *cities, EdgeMatrix *dist) {
+  // Load cities from file
+  std::ifstream infile(("graphs/" + graph + ".tsp").c_str());
+  std::string line;
+
+  int city, x, y;
+  while (std::getline(infile, line)) {
+    std::istringstream iss(line);
+    if (iss >> city >> x >> y) {
+      //printf("city: %d, x: %d, y: %d\n", city-1, x, y);
+      cities[city-1].x = x;
+      cities[city-1].y = y;
+    }
   }
+  infile.close();
 
   // Compute distances between cities (edge weights)
   for (int from = 0; from < MAX_CITIES; from++) {
@@ -73,6 +84,40 @@ bool matchPaths(int *path1, int *path2) {
   return true;
 }
 
+bool checkTourSolution(std::string graph, EdgeMatrix *dist, float length) {
+  // Load cities from file
+  std::ifstream infile(("graphs/" + graph + ".opt.tour").c_str());
+  if (!infile.good()) {
+    printf("no solution to verify\n");
+    return true;
+  }
+  std::string line;
+
+  float distance = 0.0;
+  int last_city = -1;
+  int first_city = -1;
+  int city;
+  while (std::getline(infile, line)) {
+    std::istringstream iss(line);
+    if (iss >> city) {
+      city--;
+      if (last_city == -1) {
+        first_city = last_city = city;
+        continue;
+      }
+      if (city == -1) {
+        city = first_city;
+      }
+      distance += (*dist)[last_city][city];
+      last_city = city;
+    }
+  }
+  infile.close();
+
+  printf("Shortest path. expected: %f, actual: %f\n", distance, length);
+  return distance == length;
+}
+
 // Check if path is a legitimate tour (all unique vertices)
 bool checkTourUnique(int *path) {
   bool cities[MAX_CITIES];
@@ -102,17 +147,20 @@ bool checkTourLength(int *path, EdgeMatrix *dist, float length) {
 int main(int argc, char *argv[]) {
   int opt;
   bool par_only = false;
-  while ((opt = getopt(argc, argv, "p")) != -1) {
+  std::string graph = "att48";
+  while ((opt = getopt(argc, argv, "pg:")) != -1) {
     switch (opt) {
       case 'p':
         par_only = true;
+        break;
+      case 'g':
+        graph = optarg;
         break;
       default:
         fprintf(stderr, "Usage: %s [-p]\n", argv[0]);
         exit(EXIT_FAILURE);
     }
   }
-
 
   // Initialize TSP graph
   cityType cities[MAX_CITIES];
@@ -121,9 +169,8 @@ int main(int argc, char *argv[]) {
   int parPath[MAX_CITIES];
 
   std::cout.precision(12);
-  std::cout << "Constructing graph..." << std::endl;
-  constructTSP(cities, dist);
-  saveCityDataFile(cities);
+  std::cout << "Constructing graph ""..." << std::endl;
+  constructTSP(graph, cities, dist);
 
   // Sequential algorithm
   float startTime, endTime;
@@ -141,6 +188,9 @@ int main(int argc, char *argv[]) {
     if (!checkTourLength(seqPath, dist, seqTourLength)) {
       std::cout << "Error: invalid tour (length mismatch!)" << std::endl;
     }
+    if (!checkTourSolution(graph, dist, seqTourLength)) {
+      std::cout << "Error: tour does not match solution!" << std::endl;
+    }
     savePathDataFile(seqPath, (char *)"path_seq.txt");
   }
 
@@ -156,6 +206,9 @@ int main(int argc, char *argv[]) {
   }
   if (!checkTourLength(parPath, dist, parTourLength)) {
     std::cout << "Error: invalid tour (length mismatch!)" << std::endl;
+  }
+  if (!checkTourSolution(graph, dist, parTourLength)) {
+    std::cout << "Error: tour does not match solution!" << std::endl;
   }
   savePathDataFile(parPath, (char *)"path_par.txt");
 
