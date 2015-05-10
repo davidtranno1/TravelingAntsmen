@@ -60,18 +60,16 @@ void init() {
 
 // reinitialize all ants and redistribute them
 void restartAnts() {
-  int ant, i, to = 0;
-
-  for (ant = 0; ant < MAX_ANTS; ant++) {
+  for (int ant = 0; ant < MAX_ANTS; ant++) {
     ants[ant].nextCity = -1;
     ants[ant].tourLength = 0.0;
 
-    for (i = 0; i < MAX_CITIES; i++) {
+    for (int i = 0; i < MAX_CITIES; i++) {
       ants[ant].tabu[i] = 0;
       //ants[ant].path[i] = -1;
     }
 
-    ants[ant].curCity = to++;
+    ants[ant].curCity = rand() % MAX_CITIES;
     ants[ant].pathIndex = 1;
     ants[ant].path[0] = ants[ant].curCity;
     ants[ant].tabu[ants[ant].curCity] = 1;
@@ -79,6 +77,9 @@ void restartAnts() {
 }
 
 float antProduct(int from, int to) {
+  if (isnan((*dist)[from][to])) {
+    printf("NAN (%d, %d)\n", from, to);
+  }
   return (pow(phero[from][to], ALPHA) * pow((1.0 / (*dist)[from][to]), BETA));
 }
 
@@ -117,11 +118,11 @@ int selectNextCity(int ant) {
 
   //if we get here (floating point errors), return last best city
   printf("warning: acc did not reach luckyNumber in selectNextCity\n");
-  printf("acc: %1.15f, luckyNumber: %1.15f\n", acc, luckyNumber);
+  printf("sum: %1.15f, acc: %1.15f, luckyNumber: %1.15f\n", sum, acc, luckyNumber);
   return lastBestIndex;
 }
 
-int simulateAnts(int k) {
+void simulateAnts(int k) {
   //for (int k = 0; k < MAX_ANTS; k++) {
     // check if there are any more cities to visit
     
@@ -161,11 +162,10 @@ void updateTrails()
   //Add new pheromone to the trails
   for (ant = 0; ant < MAX_ANTS; ant++) {
     for (i = 0; i < MAX_CITIES; i++) {
+      from = ants[ant].path[i];
       if (i < MAX_CITIES - 1) {
-        from = ants[ant].path[i];
         to = ants[ant].path[i+1];
       } else {
-        from = ants[ant].path[i];
         to = ants[ant].path[0];
       }
 
@@ -185,7 +185,6 @@ void updateTrails()
 float seq_ACO(EdgeMatrix *d, int *bestPath) {
   dist = d;
   int curTime = 0;
-  int success = 0;
   float pathTime = 0;
   float pheroTime = 0;
   float sBegin, sEnd;
@@ -208,7 +207,7 @@ float seq_ACO(EdgeMatrix *d, int *bestPath) {
     for (int ant = 0; ant < MAX_ANTS; ant++) {
       if (ants[ant].tourLength < best) {
         best = ants[ant].tourLength;
-        printf("new best: %f\n", best);
+        printf("new best: %1.f\n", best);
         bestIndex = ant;
       }
     }
