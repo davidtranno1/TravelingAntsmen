@@ -126,7 +126,6 @@ __global__ void constructAntTour(float *edges, float *phero,
     __shared__ bool tabu[MAX_CITIES]; //TODO: put in register wtf is that
     //__shared__ int path[MAX_CITIES];
     __shared__ int current_city;
-    __shared__ int num_visited;
     __shared__ int bestCities[MAX_THREADS];
     __shared__ float cityProb[MAX_THREADS];
 
@@ -136,10 +135,10 @@ __global__ void constructAntTour(float *edges, float *phero,
     const int citiesPerThread = (MAX_CITIES + MAX_THREADS - 1) / MAX_THREADS;
     const int startCityIndex = threadIdx.x * citiesPerThread;
     const int antId = blockIdx.x;
-    float tour_length;
+
+    float tour_length = 0.0;
 
     if (startCityIndex >= MAX_CITIES) {
-      //printf("i'm over. startCityIndex: %d, MAX_CITIES: %d\n", startCityIndex, MAX_CITIES);
       cityProb[threadIdx.x] = 0;
       return;
     }
@@ -149,8 +148,6 @@ __global__ void constructAntTour(float *edges, float *phero,
     if (threadIdx.x == 0) {
       make_rand(state, randArray);
       current_city = randArray[antId * blockDim.x + threadIdx.x] * MAX_CITIES;
-      num_visited = 1;
-      tour_length = 0.0;
       tabu[current_city] = true;
       pathResults[antId * MAX_CITIES] = current_city;
     }
@@ -170,7 +167,7 @@ __global__ void constructAntTour(float *edges, float *phero,
     __syncthreads();
 
     //check if we have finished the tour
-    while (num_visited != MAX_CITIES) {
+    for (int num_visited = 1; num_visited < MAX_CITIES; num_visited++) {
 
       int tile;
       if (startCityIndex + citiesPerThread >= MAX_CITIES) {
@@ -200,21 +197,15 @@ __global__ void constructAntTour(float *edges, float *phero,
       //for each thread, look through cities and stochastically select one
       int localCity = selectCity(state, randArray, localCityProb, citiesPerThread);
       cityProb[threadIdx.x] = localCityProb[localCity];
-      /*if (antId == 0 && threadIdx.x == 0) {
-        for (int i = 0; i < citiesPerThread; i++) {
-          printf("localCityProb[%d] = %1.15f\n", i, localCityProb[i]);
-        }
-      }*/
       bestCities[threadIdx.x] = localCity + startCityIndex;
-      //printf("BESTCITIES: %d\n", localCity + startCityIndex);
       __syncthreads();
 
-      //reduce over bestCities and pick city with best absolute heuristic
+      //reduce over bestCities and randomly select city
       if (threadIdx.x == 0) {
-        //int nextIndex = selectCity(state, randArray, cityProb, MAX_THREADS);
-        //int next_city = bestCities[nextIndex];
+        int nextIndex = selectCity(state, randArray, cityProb, MAX_THREADS);
+        int next_city = bestCities[nextIndex];
         //printf("best cities done in block %d\n", blockIdx.x);
-        float best_distance = MAX_DIST * 2;
+        /*float best_distance = MAX_DIST * 2;
         int next_city = -1;
         for (int i = 0; i < MAX_THREADS && i < MAX_CITIES; i++) {
           if (cityProb[i] == 0) {
@@ -226,7 +217,7 @@ __global__ void constructAntTour(float *edges, float *phero,
             best_distance = distance;
             next_city = bestCities[i];
           }
-        }
+        }*/
         /*if (next_city == -1) {
           printf("OH NO\n");
         }*/
@@ -235,7 +226,6 @@ __global__ void constructAntTour(float *edges, float *phero,
         }*/
         tour_length += localEdges[next_city];
         pathResults[antId * MAX_CITIES + num_visited] = next_city;
-        num_visited++;
         current_city = next_city;
         tabu[current_city] = true;
       }
@@ -289,14 +279,12 @@ __global__ void updateTrailsAtomic(float *phero, int *paths, float *tourLengths)
       to = tmp;
     }
     atomicAdd(&phero[toIndex(from, to)], QVAL / tourLengths[antId]);
-    //atomicExch(&phero[toIndex(to, from)], phero[toIndex(from, to)]);
   }
 }
 
 __global__ void updateSymmetricPhero(float *phero) {
   for (int i = 0; i < MAX_CITIES; i++) {
     for (int j = 0; j < i; j++) {
-      //phero[toIndex(i, j)] *= RHO;
       phero[toIndex(j, i)] = phero[toIndex(i, j)];
     }
   }
@@ -304,7 +292,6 @@ __global__ void updateSymmetricPhero(float *phero) {
 
 __global__ void updateTrails(float *phero, int *paths, float *tourLengths)
 {
-  //int antId = threadIdx.x;
   //__shared__ float localPaths[MAX_CITIES];
 
   int numPhero = (NUM_EDGES + (blockDim.x * (MAX_ANTS * 2) - 1)) /
@@ -352,7 +339,6 @@ __global__ void updateTrails(float *phero, int *paths, float *tourLengths)
           checkTo = paths[toIndex(i, 0)];
         }
 
-        //printf("NEW VALUE: to: %d, from: %d", to, from);
         if ((checkFrom == from && checkTo == to) ||
             (checkFrom == to && checkTo == from))
         {
@@ -364,11 +350,7 @@ __global__ void updateTrails(float *phero, int *paths, float *tourLengths)
       if (touched) {
         int idx = toIndex(from, to);
         phero[idx] += (QVAL / tourLengths[i]);
-        //phero[idx] *= RHO;
         phero[toIndex(to, from)] = phero[idx];
-        /*if (i == 0) {
-          printf("NEW VALUE: to: %d, from: %d, value: %f\n", to, from, phero[toIndex(to, from)]);
-        }*/
       }
     }
     //__syncthreads();
@@ -463,8 +445,8 @@ float cuda_ACO(EdgeMatrix *dist, int *bestPath) {
 
   float pathTime = 0;
   float pheroTime = 0;
-  float sBegin;
-  float sEnd;
+  float sBegin, sEnd;
+
   for (int i = 0; i < MAX_TOURS; i++) {
     best_index = -1;
 
@@ -473,7 +455,7 @@ float cuda_ACO(EdgeMatrix *dist, int *bestPath) {
     cudaThreadSynchronize();
     sEnd = CycleTimer::currentSeconds();
 
-    pathTime += (sEnd - sBegin);
+    pathTime += sEnd - sBegin;
 
     cudaMemcpy(copiedTourResults, tourResults, sizeof(float) * MAX_ANTS,
                cudaMemcpyDeviceToHost);
@@ -482,7 +464,7 @@ float cuda_ACO(EdgeMatrix *dist, int *bestPath) {
     for (int j = 0; j < MAX_ANTS; j++) {
       if (copiedTourResults[j] < best) {
         best = copiedTourResults[j];
-        printf("new best: %1.f\n", best);
+        //printf("new best: %1.f\n", best);
         best_index = j;
       }
     }

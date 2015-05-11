@@ -87,10 +87,10 @@ int selectNextCity(int ant) {
     }
   }
 
-  if (sum == 0) {
+  /*if (sum == 0) {
     printf("warning: zero sum in selectNextCity\n");
     return 0;
-  }
+  }*/
 
   int lastBestIndex = 0;
   float acc = 0;
@@ -117,9 +117,7 @@ int selectNextCity(int ant) {
 }
 
 void simulateAnts(int k) {
-  //for (int k = 0; k < MAX_ANTS; k++) {
-    // check if there are any more cities to visit
-    
+  // check if there are any more cities to visit
   while(ants[k].pathIndex < MAX_CITIES) {
     ants[k].nextCity = selectNextCity(k);
     ants[k].tabu[ants[k].nextCity] = 1;
@@ -129,7 +127,7 @@ void simulateAnts(int k) {
 
     ants[k].curCity = ants[k].nextCity;
   }
-  
+
   //handle last case->last city to first
   ants[k].tourLength += (*dist)[ants[k].path[MAX_CITIES -1]][ants[k].path[0]];
 }
@@ -181,24 +179,23 @@ float seq_ACO(EdgeMatrix *d, int *bestPath) {
   float sBegin, sEnd;
 
   srand(time(NULL));
-
   init();
 
   for (int curTime = 0; curTime < MAX_TOURS; curTime++) {
     bestIndex = -1;
     sBegin = CycleTimer::currentSeconds();
-   
+
     for (int i = 0; i < MAX_ANTS; i++) {
       simulateAnts(i);
     }
-    
+
     sEnd = CycleTimer::currentSeconds();
     pathTime += sEnd - sBegin;
 
     for (int ant = 0; ant < MAX_ANTS; ant++) {
       if (ants[ant].tourLength < best) {
         best = ants[ant].tourLength;
-        printf("new best: %1.f\n", best);
+        //printf("new best: %1.f\n", best);
         bestIndex = ant;
       }
     }

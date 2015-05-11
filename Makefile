@@ -2,7 +2,7 @@ EXECUTABLE := main
 LOGS       := logs
 LIBS       :=
 FRAMEWORKS :=
-GRAPH      := a280
+GRAPH      := pr1002
  
 ARCH=$(shell uname | sed -e 's/-.*//g')
 OBJDIR=objs
