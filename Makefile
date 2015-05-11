@@ -2,8 +2,8 @@ EXECUTABLE := main
 LOGS       := logs
 LIBS       :=
 FRAMEWORKS :=
-GRAPH      := rat783
- 
+GRAPH      := fnl4462
+
 ARCH=$(shell uname | sed -e 's/-.*//g')
 OBJDIR=objs
 CXX=g++ -m64

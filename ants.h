@@ -1,7 +1,7 @@
 // Traveling Antsmen constants and struct declarations
 
-#define MAX_CITIES 783 // number of vertices
-#define MAX_DIST 1000000
+#define MAX_CITIES 4462 // number of vertices
+#define MAX_DIST 100000
 #define MAX_TOUR (MAX_CITIES * MAX_DIST)
 #define MAX_ANTS MAX_CITIES
 #define NUM_EDGES ((MAX_CITIES * MAX_CITIES - MAX_CITIES) / 2)
